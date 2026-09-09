@@ -1,0 +1,848 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+const HERMES_ORIGIN = String(globalThis.ASK_NEMOCLAW_CONFIG?.hermesOrigin || "").replace(/\/$/, "");
+function isAllowedNemoClawOrigin(value) {
+  try {
+    const url = new URL(value);
+    const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+    const allowedScheme = url.protocol === "https:" || (
+      url.protocol === "http:" && loopbackHosts.has(url.hostname)
+    );
+    return allowedScheme && url.origin === value && !url.username && !url.password;
+  } catch (_) {
+    return false;
+  }
+}
+if (!isAllowedNemoClawOrigin(HERMES_ORIGIN)) {
+  throw new Error("Ask NemoClaw requires HTTPS or an HTTP loopback NemoClaw origin");
+}
+const CONVERSATIONS_ENDPOINT = `${HERMES_ORIGIN}/api/plugins/ask-nemoclaw/conversations`;
+const MAX_PAGE_TEXT_CHARS = 200000;
+const MAX_SELECTED_TEXT_CHARS = 50000;
+const MAX_VIEWPORT_IMAGE_BYTES = 4000000;
+const MAX_VIEWPORT_IMAGE_PIXELS = 4000000;
+const MAX_VIEWPORT_IMAGE_EDGE = 2048;
+const HERMES_REQUEST_TIMEOUT_MS = 20000;
+
+const elements = {
+  pageLabel: document.getElementById("page-label"),
+  connectionStatus: document.getElementById("connection-status"),
+  checkConnectionButton: document.getElementById("check-connection-button"),
+  openNemoClawButton: document.getElementById("open-nemoclaw-button"),
+  conversationSelect: document.getElementById("conversation-select"),
+  newConversationButton: document.getElementById("new-conversation-button"),
+  refreshButton: document.getElementById("refresh-button"),
+  messages: document.getElementById("messages"),
+  emptyState: document.getElementById("empty-state"),
+  status: document.getElementById("status-card"),
+  statusTitle: document.getElementById("status-title"),
+  statusDetail: document.getElementById("status-detail"),
+  stopButton: document.getElementById("stop-button"),
+  error: document.getElementById("error-card"),
+  errorTitle: document.getElementById("error-title"),
+  errorDetail: document.getElementById("error-detail"),
+  contextMode: document.getElementById("context-mode"),
+  composer: document.getElementById("composer"),
+  prompt: document.getElementById("prompt"),
+  sendButton: document.getElementById("send-button"),
+  retryButton: document.getElementById("retry-button"),
+  signInButton: document.getElementById("sign-in-button")
+};
+
+let activePage = null;
+let activeConversationId = null;
+let activeJob = null;
+let pollTimer = null;
+let retryAction = null;
+let pendingSubmission = null;
+
+function setConnectionState(state, label) {
+  elements.connectionStatus.dataset.state = state;
+  elements.connectionStatus.textContent = label;
+}
+
+function sanitizePageUrl(rawUrl) {
+  const url = new URL(rawUrl || "");
+  if (!['http:', 'https:'].includes(url.protocol)) return null;
+  if (url.username || url.password) return null;
+  url.search = "";
+  url.hash = "";
+  return url.href;
+}
+
+async function readActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const stored = await chrome.storage.session.get("askNemoClawTarget");
+  const authorizedTarget = stored.askNemoClawTarget;
+  const matchingStoredTarget = authorizedTarget?.tabId === tab?.id ? authorizedTarget : null;
+  const pageUrl = sanitizePageUrl(tab?.url || matchingStoredTarget?.page_url || "");
+  if (!tab?.id || !pageUrl) {
+    throw new Error("unsupported_page");
+  }
+  activePage = {
+    tabId: tab.id,
+    windowId: tab.windowId,
+    page_url: pageUrl,
+    page_title: tab.title || matchingStoredTarget?.page_title || "Untitled page"
+  };
+  elements.pageLabel.textContent = `${activePage.page_title} · ${activePage.page_url}`;
+  return activePage;
+}
+
+async function refreshActivePage(showFailure = true) {
+  try {
+    await readActiveTab();
+    elements.contextMode.textContent = "Available page text + visible viewport";
+    return true;
+  } catch (_) {
+    if (showFailure) {
+      showError(
+        "Page access unavailable",
+        "Open a normal HTTP or HTTPS page and click the Ask NemoClaw toolbar icon, then try again.",
+        false,
+        () => refreshActivePage(true)
+      );
+    }
+    return false;
+  }
+}
+
+function showError(title, detail, authenticationRequired = false, action = null) {
+  elements.errorTitle.textContent = title;
+  elements.errorDetail.textContent = detail;
+  elements.signInButton.hidden = !authenticationRequired;
+  elements.retryButton.hidden = !action;
+  retryAction = action;
+  elements.error.hidden = false;
+}
+
+function clearError() {
+  elements.error.hidden = true;
+  retryAction = null;
+}
+
+function appendText(parent, tag, text, className = "") {
+  const node = document.createElement(tag);
+  node.textContent = String(text ?? "");
+  if (className) node.className = className;
+  parent.appendChild(node);
+  return node;
+}
+
+function humanize(key) {
+  return key.replaceAll("_", " ").replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function decodeRenderableItem(item) {
+  if (typeof item !== "string") return item;
+  const candidate = item.trim();
+  if (!candidate.startsWith("{") && !candidate.startsWith("[")) return item;
+  try {
+    return JSON.parse(candidate);
+  } catch (_) {
+    return item;
+  }
+}
+
+function parseMarkdownBlocks(value) {
+  const lines = String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\s+--\s+(?=#{1,6}\s)/g, "\n\n")
+    .split("\n");
+  const blocks = [];
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    const text = paragraph.join(" ").trim();
+    if (text) blocks.push({ type: "paragraph", text });
+    paragraph = [];
+  };
+  const isTableDivider = line =>
+    /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+  const splitTableRow = line =>
+    line.trim().replace(/^\||\|$/g, "").split("|").map(cell => cell.trim());
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.+?)\s*#*$/);
+    if (heading) {
+      flushParagraph();
+      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
+      continue;
+    }
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushParagraph();
+      blocks.push({ type: "rule" });
+      continue;
+    }
+    if (trimmed.includes("|") && index + 1 < lines.length && isTableDivider(lines[index + 1])) {
+      flushParagraph();
+      const headers = splitTableRow(trimmed);
+      const rows = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim().includes("|")) {
+        rows.push(splitTableRow(lines[index]));
+        index += 1;
+      }
+      index -= 1;
+      blocks.push({ type: "table", headers, rows });
+      continue;
+    }
+
+    const unordered = trimmed.match(/^[-*+]\s+(?:\[([ xX])\]\s+)?(.+)$/);
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      flushParagraph();
+      const orderedList = Boolean(ordered);
+      const items = [];
+      while (index < lines.length) {
+        const candidate = lines[index].trim();
+        const match = orderedList
+          ? candidate.match(/^\d+[.)]\s+(.+)$/)
+          : candidate.match(/^[-*+]\s+(?:\[([ xX])\]\s+)?(.+)$/);
+        if (!match) break;
+        items.push(
+          orderedList
+            ? { text: match[1] }
+            : { text: match[2], checked: match[1] ? match[1].toLowerCase() === "x" : null }
+        );
+        index += 1;
+      }
+      index -= 1;
+      blocks.push({ type: "list", ordered: orderedList, items });
+      continue;
+    }
+
+    if (trimmed.startsWith(">")) {
+      flushParagraph();
+      blocks.push({ type: "quote", text: trimmed.replace(/^>\s?/, "") });
+      continue;
+    }
+    paragraph.push(trimmed);
+  }
+  flushParagraph();
+  return blocks;
+}
+
+function appendInlineMarkdown(parent, value) {
+  const text = String(value ?? "");
+  const pattern = /(\*\*[^*\n]+\*\*|__[^_\n]+__|`[^`\n]+`|\*[^*\n]+\*|_[^_\n]+_)/g;
+  let offset = 0;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index > offset) parent.appendChild(document.createTextNode(text.slice(offset, match.index)));
+    const token = match[0];
+    const node = document.createElement(token.startsWith("`") ? "code" : token.startsWith("**") || token.startsWith("__") ? "strong" : "em");
+    node.textContent = token.startsWith("**") || token.startsWith("__") ? token.slice(2, -2) : token.slice(1, -1);
+    parent.appendChild(node);
+    offset = match.index + token.length;
+  }
+  if (offset < text.length) parent.appendChild(document.createTextNode(text.slice(offset)));
+}
+
+function renderMarkdown(parent, value) {
+  const blocks = parseMarkdownBlocks(value);
+  if (blocks.length === 0) return;
+  for (const block of blocks) {
+    if (block.type === "rule") {
+      parent.appendChild(document.createElement("hr"));
+      continue;
+    }
+    if (block.type === "table") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "markdown-table-wrap";
+      const table = document.createElement("table");
+      const headRow = document.createElement("tr");
+      for (const header of block.headers) {
+        const cell = document.createElement("th");
+        appendInlineMarkdown(cell, header);
+        headRow.appendChild(cell);
+      }
+      const thead = document.createElement("thead");
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+      const tbody = document.createElement("tbody");
+      for (const row of block.rows) {
+        const rowNode = document.createElement("tr");
+        for (let index = 0; index < block.headers.length; index += 1) {
+          const cell = document.createElement("td");
+          appendInlineMarkdown(cell, row[index] || "");
+          rowNode.appendChild(cell);
+        }
+        tbody.appendChild(rowNode);
+      }
+      table.appendChild(tbody);
+      wrapper.appendChild(table);
+      parent.appendChild(wrapper);
+      continue;
+    }
+    if (block.type === "list") {
+      const list = document.createElement(block.ordered ? "ol" : "ul");
+      for (const item of block.items) {
+        const itemNode = document.createElement("li");
+        if (item.checked !== null && item.checked !== undefined) {
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = item.checked;
+          checkbox.disabled = true;
+          itemNode.appendChild(checkbox);
+        }
+        appendInlineMarkdown(itemNode, item.text);
+        list.appendChild(itemNode);
+      }
+      parent.appendChild(list);
+      continue;
+    }
+    const tag = block.type === "heading" ? `h${Math.min(6, Math.max(4, block.level + 2))}` : block.type === "quote" ? "blockquote" : "p";
+    const node = document.createElement(tag);
+    appendInlineMarkdown(node, block.text);
+    parent.appendChild(node);
+  }
+}
+
+function renderValue(parent, value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      appendText(parent, "p", "No issues identified.");
+      return;
+    }
+    for (const originalItem of value) {
+      const item = decodeRenderableItem(originalItem);
+      const itemNode = document.createElement("div");
+      itemNode.className = "response-item";
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        if (item.priority) appendText(itemNode, "div", item.priority, "priority");
+        for (const [key, field] of Object.entries(item)) {
+          if (key === "priority" || field === "") continue;
+          appendText(itemNode, "p", `${humanize(key)}: ${typeof field === "string" ? field : JSON.stringify(field)}`);
+        }
+      } else {
+        if (typeof item === "string") renderMarkdown(itemNode, item);
+        else appendText(itemNode, "p", JSON.stringify(item));
+      }
+      parent.appendChild(itemNode);
+    }
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, field] of Object.entries(value)) {
+      const fieldNode = document.createElement("div");
+      fieldNode.className = "response-field";
+      appendText(fieldNode, "strong", `${humanize(key)}:`);
+      if (typeof field === "string") renderMarkdown(fieldNode, field);
+      else appendText(fieldNode, "p", JSON.stringify(field));
+      parent.appendChild(fieldNode);
+    }
+    return;
+  }
+  if (typeof value === "string") renderMarkdown(parent, value);
+  else appendText(parent, "p", value);
+}
+
+function renderResultInto(parent, result) {
+  if (result?.format === "structured" && result.data && typeof result.data === "object") {
+    for (const [key, value] of Object.entries(result.data)) {
+      const section = document.createElement("section");
+      section.className = "response-section";
+      appendText(section, "h3", humanize(key));
+      renderValue(section, value);
+      parent.appendChild(section);
+    }
+  } else {
+    renderMarkdown(parent, result?.text || "NemoClaw returned an empty response.");
+  }
+}
+
+function captureFromPage(maximum, maximumSelection) {
+  const visible = document.body?.innerText || "";
+  const selected = globalThis.getSelection?.().toString() || "";
+  return {
+    page_title: document.title || "Untitled page",
+    page_text: visible.slice(0, maximum),
+    page_text_truncated: visible.length > maximum,
+    selected_text: selected.slice(0, maximumSelection)
+  };
+}
+
+function scaledViewportDimensions(width, height) {
+  if (!(width > 0 && height > 0)) throw new Error("invalid_viewport_image");
+  const edgeScale = Math.min(1, MAX_VIEWPORT_IMAGE_EDGE / Math.max(width, height));
+  const pixelScale = Math.min(1, Math.sqrt(MAX_VIEWPORT_IMAGE_PIXELS / (width * height)));
+  const scale = Math.min(edgeScale, pixelScale);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
+}
+
+async function normalizeViewportImage(dataUrl) {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/jpeg;base64,")) {
+    throw new Error("invalid_viewport_image");
+  }
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error("invalid_viewport_image"));
+    image.src = dataUrl;
+  });
+  const dimensions = scaledViewportDimensions(image.naturalWidth, image.naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = dimensions.width;
+  canvas.height = dimensions.height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("invalid_viewport_image");
+  context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+  const normalized = canvas.toDataURL("image/jpeg", 0.9);
+  const contentBase64 = normalized.slice(normalized.indexOf(",") + 1);
+  const decodedBytes = Math.floor((contentBase64.length * 3) / 4);
+  if (!contentBase64 || decodedBytes > MAX_VIEWPORT_IMAGE_BYTES) {
+    throw new Error("viewport_image_too_large");
+  }
+  return {
+    mime_type: "image/jpeg",
+    content_base64: contentBase64,
+    width: dimensions.width,
+    height: dimensions.height
+  };
+}
+
+async function captureViewportImage(windowId) {
+  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+    format: "jpeg",
+    quality: 90
+  });
+  return normalizeViewportImage(dataUrl);
+}
+
+async function captureContext() {
+  try {
+    const page = await readActiveTab();
+    const injection = await chrome.scripting.executeScript({
+      target: { tabId: page.tabId },
+      func: captureFromPage,
+      args: [MAX_PAGE_TEXT_CHARS, MAX_SELECTED_TEXT_CHARS]
+    });
+    const capture = injection?.[0]?.result;
+    const viewportImage = await captureViewportImage(page.windowId);
+    const pageText = String(capture?.page_text || "").trim();
+    const selectedText = String(capture?.selected_text || "").trim();
+    return {
+      page_url: page.page_url,
+      page_title: String(capture?.page_title || page.page_title).slice(0, 512),
+      capture_mode: "browser",
+      page_text: pageText || null,
+      page_text_truncated: Boolean(capture?.page_text_truncated),
+      selected_text: selectedText,
+      viewport_image: viewportImage
+    };
+  } catch (error) {
+    const messages = {
+      unsupported_page: "Open a normal HTTP or HTTPS page and click the extension icon again.",
+      invalid_viewport_image: "Chrome could not prepare an image of the visible page area.",
+      viewport_image_too_large: "The visible page image exceeded the protected request limit. Reduce browser zoom and try again."
+    };
+    showError(
+      "Page context unavailable",
+      messages[error.message] || "Click the extension icon on the target page to grant temporary page access.",
+      false,
+      () => submitMessage(true)
+    );
+    return null;
+  }
+}
+
+function authenticationError() {
+  const error = new Error("authentication");
+  error.authenticationRequired = true;
+  return error;
+}
+
+async function authenticatedFetch(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HERMES_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      credentials: "include",
+      cache: "no-store",
+      redirect: "manual",
+      signal: controller.signal
+    });
+    if (
+      response.status === 401
+      || response.status === 302
+      || response.status === 303
+      || response.status === 307
+      || response.status === 308
+      || response.type === "opaqueredirect"
+    ) {
+      setConnectionState("authentication", "Sign-in required");
+      throw authenticationError();
+    }
+    if (response.status >= 500) {
+      setConnectionState("unavailable", `NemoClaw returned HTTP ${response.status}`);
+    } else {
+      setConnectionState("connected", "Connected to NemoClaw");
+    }
+    return response;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setConnectionState("unavailable", "NemoClaw did not respond");
+      throw new Error("NemoClaw did not respond within 20 seconds.");
+    }
+    if (!error?.authenticationRequired) {
+      setConnectionState("unavailable", "NemoClaw is unavailable");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function checkNemoClawConnection(showFailure = true) {
+  elements.checkConnectionButton.disabled = true;
+  setConnectionState("checking", "Checking NemoClaw…");
+  try {
+    const response = await authenticatedFetch(CONVERSATIONS_ENDPOINT);
+    await readJsonResponse(response, "NemoClaw did not return a valid connection response.");
+    setConnectionState("connected", "Connected to NemoClaw");
+    return true;
+  } catch (error) {
+    if (error.authenticationRequired) {
+      setConnectionState("authentication", "Sign-in required");
+      if (showFailure) {
+        showError("Sign in to NemoClaw", "Open NemoClaw, sign in normally, and then select Check.", true, () => checkNemoClawConnection(true));
+      }
+    } else {
+      setConnectionState("unavailable", "NemoClaw is unavailable");
+      if (showFailure) {
+        showError("NemoClaw is unavailable", error.message || "The configured NemoClaw service did not respond.", false, () => checkNemoClawConnection(true));
+      }
+    }
+    return false;
+  } finally {
+    elements.checkConnectionButton.disabled = false;
+  }
+}
+
+function showStatus(status) {
+  const states = {
+    loading: ["Loading conversations", "NemoClaw is restoring your recent conversations."],
+    queued: ["Request queued", "NemoClaw is reserving capacity."],
+    prompting: ["NemoClaw is responding", "NemoClaw is using this conversation and the current page context."],
+    cancelling: ["Stopping", "NemoClaw is interrupting the current response."]
+  };
+  const [title, detail] = states[status] || states.queued;
+  elements.statusTitle.textContent = title;
+  elements.statusDetail.textContent = detail;
+  elements.stopButton.hidden = status === "cancelling";
+  elements.status.hidden = false;
+  elements.status.scrollIntoView?.({ block: "end", behavior: "smooth" });
+}
+
+function hideStatus() {
+  elements.status.hidden = true;
+}
+
+function conversationUrl(conversationId, suffix = "") {
+  return `${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(conversationId)}${suffix}`;
+}
+
+function errorDetailFromResponse(response, body, fallback) {
+  if (typeof body?.detail === "string") return body.detail;
+  return fallback || `NemoClaw returned HTTP ${response.status}.`;
+}
+
+async function readJsonResponse(response, fallback) {
+  let body = null;
+  try { body = await response.json(); } catch (_) {}
+  if (response.redirected || response.url?.includes("/login") || response.headers.get("content-type")?.includes("text/html")) {
+    throw authenticationError();
+  }
+  if (!response.ok) throw new Error(errorDetailFromResponse(response, body, fallback));
+  if (body === null) throw new Error(fallback || "NemoClaw returned an invalid response.");
+  return body;
+}
+
+function renderConversationMessages(messages) {
+  elements.messages.replaceChildren();
+  if (!messages.length) {
+    elements.messages.appendChild(elements.emptyState);
+    elements.emptyState.hidden = false;
+    return;
+  }
+  for (const message of messages) {
+    const bubble = document.createElement("article");
+    bubble.className = `message ${message.role === "user" ? "user" : "assistant"}`;
+    appendText(bubble, "div", message.role === "user" ? "You" : "NemoClaw", "message-role");
+    if (message.role === "assistant" && message.result) {
+      renderResultInto(bubble, message.result);
+    } else {
+      renderMarkdown(bubble, message.content || "");
+    }
+    elements.messages.appendChild(bubble);
+  }
+  globalThis.scrollTo?.({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+async function loadConversation(conversationId, resumePolling = true) {
+  const response = await authenticatedFetch(conversationUrl(conversationId));
+  const body = await readJsonResponse(response, "NemoClaw could not load this conversation.");
+  activeConversationId = body.conversation.conversation_id;
+  await chrome.storage.local.set({ askNemoClawConversationId: activeConversationId });
+  elements.conversationSelect.value = activeConversationId;
+  renderConversationMessages(body.messages || []);
+  if (resumePolling && body.active_job) {
+    activeJob = body.active_job;
+    showStatus(activeJob.status);
+    schedulePoll(activeJob.job_id);
+  } else if (!activeJob) {
+    hideStatus();
+  }
+  return body;
+}
+
+async function loadConversationList(preferredId = null) {
+  const response = await authenticatedFetch(CONVERSATIONS_ENDPOINT);
+  const body = await readJsonResponse(response, "NemoClaw could not list recent conversations.");
+  const conversations = body.conversations || [];
+  elements.conversationSelect.replaceChildren();
+  for (const conversation of conversations) {
+    const option = document.createElement("option");
+    option.value = conversation.conversation_id;
+    option.textContent = conversation.title || "New conversation";
+    elements.conversationSelect.appendChild(option);
+  }
+  const selected = conversations.find(item => item.conversation_id === preferredId)?.conversation_id
+    || conversations[0]?.conversation_id
+    || null;
+  if (selected) await loadConversation(selected);
+  return selected;
+}
+
+async function createConversation() {
+  clearTimeout(pollTimer);
+  activeJob = null;
+  hideStatus();
+  clearError();
+  const title = activePage?.page_title || "New conversation";
+  const response = await authenticatedFetch(CONVERSATIONS_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=UTF-8" },
+    body: JSON.stringify({ title })
+  });
+  const body = await readJsonResponse(response, "NemoClaw could not create a conversation.");
+  await loadConversationList(body.conversation.conversation_id);
+  elements.prompt.focus();
+}
+
+async function refreshPageAndCreateConversation() {
+  elements.refreshButton.disabled = true;
+  clearTimeout(pollTimer);
+  activeJob = null;
+  pendingSubmission = null;
+  hideStatus();
+  clearError();
+  try {
+    const pageAvailable = await refreshActivePage(false);
+    if (!pageAvailable) {
+      showError(
+        "Page access unavailable",
+        "Open a normal HTTP or HTTPS page and click the Ask NemoClaw toolbar icon, then select Refresh again.",
+        false,
+        () => refreshPageAndCreateConversation()
+      );
+      return;
+    }
+    elements.prompt.value = "";
+    await createConversation();
+  } catch (error) {
+    showError(
+      "Page refresh failed",
+      error.message || "Ask NemoClaw could not reload the active page.",
+      false,
+      () => refreshPageAndCreateConversation()
+    );
+  } finally {
+    elements.refreshButton.disabled = false;
+  }
+}
+
+function schedulePoll(jobId) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(() => pollResponse(jobId), 1200);
+}
+
+async function pollResponse(jobId) {
+  if (!activeConversationId) return;
+  try {
+    const response = await authenticatedFetch(conversationUrl(activeConversationId, `/messages/${encodeURIComponent(jobId)}`));
+    const body = await readJsonResponse(response, "The extension could not read the response status from NemoClaw.");
+    if (body.conversation_id !== activeConversationId) return;
+    if (body.status === "complete") {
+      activeJob = null;
+      pendingSubmission = null;
+      hideStatus();
+      clearError();
+      await loadConversation(activeConversationId, false);
+      await loadConversationList(activeConversationId);
+      return;
+    }
+    if (body.status === "failed" || body.status === "cancelled") {
+      activeJob = null;
+      pendingSubmission = null;
+      hideStatus();
+      await loadConversation(activeConversationId, false);
+      showError(
+        body.status === "cancelled" ? "Request stopped" : "NemoClaw request failed",
+        body.error?.message || "NemoClaw could not process this request.",
+        false,
+        null
+      );
+      return;
+    }
+    activeJob = body;
+    showStatus(body.status);
+    schedulePoll(jobId);
+  } catch (error) {
+    if (error.authenticationRequired) {
+      showError("Sign in to NemoClaw", "Your NemoClaw session is missing or expired. Sign in normally, then try again.", true, () => initialize());
+    } else {
+      showError("NemoClaw is unavailable", error.message, false, () => pollResponse(jobId));
+    }
+  }
+}
+
+function newIdempotencyKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function submitMessage(retryPending = false) {
+  const prompt = elements.prompt.value.trim();
+  if (!retryPending && !prompt) {
+    showError("Message required", "Enter the instruction you want NemoClaw to follow.", false, null);
+    return;
+  }
+  if (!activeConversationId) await createConversation();
+  let submission = retryPending ? pendingSubmission : null;
+  if (!submission) {
+    const context = await captureContext();
+    if (!context) return;
+    submission = {
+      conversationId: activeConversationId,
+      idempotencyKey: newIdempotencyKey(),
+      body: { ...context, prompt }
+    };
+    pendingSubmission = submission;
+  }
+
+  clearError();
+  elements.sendButton.disabled = true;
+  showStatus("queued");
+  try {
+    const response = await authenticatedFetch(conversationUrl(submission.conversationId, "/messages"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+        "Idempotency-Key": submission.idempotencyKey
+      },
+      body: JSON.stringify(submission.body)
+    });
+    const body = await readJsonResponse(response, "NemoClaw did not accept this message.");
+    activeJob = body;
+    elements.prompt.value = "";
+    await loadConversation(activeConversationId, false);
+    showStatus(body.status);
+    schedulePoll(body.job_id);
+  } catch (error) {
+    activeJob = null;
+    hideStatus();
+    if (error.authenticationRequired) {
+      showError("Sign in to NemoClaw", "Your NemoClaw session is missing or expired. Sign in normally, then try again.", true, () => submitMessage(true));
+    } else {
+      showError("Request could not start", error.message || "NemoClaw did not accept the message.", false, () => submitMessage(true));
+    }
+  } finally {
+    elements.sendButton.disabled = false;
+  }
+}
+
+async function stopActiveJob() {
+  if (!activeConversationId || !activeJob?.job_id) return;
+  elements.stopButton.disabled = true;
+  try {
+    const response = await authenticatedFetch(
+      conversationUrl(activeConversationId, `/messages/${encodeURIComponent(activeJob.job_id)}/cancel`),
+      { method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body: "{}" }
+    );
+    const body = await readJsonResponse(response, "NemoClaw could not stop this request.");
+    activeJob = body;
+    showStatus(body.status);
+    schedulePoll(body.job_id);
+  } catch (error) {
+    showError("Stop failed", error.message, false, () => stopActiveJob());
+  } finally {
+    elements.stopButton.disabled = false;
+  }
+}
+
+async function initialize() {
+  clearError();
+  showStatus("loading");
+  await refreshActivePage(false);
+  try {
+    const stored = await chrome.storage.local.get("askNemoClawConversationId");
+    const selected = await loadConversationList(stored.askNemoClawConversationId || null);
+    if (!selected) await createConversation();
+  } catch (error) {
+    if (error.authenticationRequired) {
+      showError("Sign in to NemoClaw", "Sign in normally to load your Ask NemoClaw conversations.", true, () => initialize());
+    } else {
+      showError("NemoClaw is unavailable", error.message || "The extension could not load NemoClaw.", false, () => initialize());
+    }
+  } finally {
+    if (!activeJob) hideStatus();
+  }
+}
+
+elements.composer.addEventListener("submit", event => {
+  event.preventDefault();
+  submitMessage(false);
+});
+elements.retryButton.addEventListener("click", () => retryAction?.());
+elements.newConversationButton.addEventListener("click", () => createConversation().catch(error => showError("Conversation could not start", error.message, false, () => createConversation())));
+elements.refreshButton.addEventListener("click", refreshPageAndCreateConversation);
+elements.checkConnectionButton.addEventListener("click", () => checkNemoClawConnection(true));
+elements.openNemoClawButton.addEventListener("click", () => chrome.tabs.create({ url: `${HERMES_ORIGIN}/` }));
+elements.conversationSelect.addEventListener("change", async () => {
+  clearTimeout(pollTimer);
+  activeJob = null;
+  pendingSubmission = null;
+  hideStatus();
+  clearError();
+  try { await loadConversation(elements.conversationSelect.value); }
+  catch (error) { showError("Conversation could not load", error.message, false, () => loadConversation(elements.conversationSelect.value)); }
+});
+elements.stopButton.addEventListener("click", stopActiveJob);
+elements.signInButton.addEventListener("click", () => chrome.tabs.create({ url: `${HERMES_ORIGIN}/login` }));
+elements.prompt.addEventListener("keydown", event => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    submitMessage(false);
+  }
+});
+
+chrome.runtime.onMessage.addListener(message => {
+  if (message?.type === "active-tab-granted") {
+    refreshActivePage(false);
+  }
+});
+
+initialize();
