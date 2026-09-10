@@ -19,15 +19,35 @@ MANAGED_POLICY_BEFORE = '      enabled: ["nemoclaw"],'
 MANAGED_POLICY_AFTER = (
     '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"],'
 )
+RELAY_VERSION = "0.7.2"
+RELAY_WHEEL_FILENAME = (
+    "nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64."
+    "manylinux2014_x86_64.whl"
+)
+RELAY_WHEEL_URL = (
+    "https://files.pythonhosted.org/packages/11/83/"
+    "90230c2e9fae1aee39f768d4a9ef57e9f2716bcaed1a5923cce8b526c66b/"
+    + RELAY_WHEEL_FILENAME
+)
+RELAY_WHEEL_SHA256 = (
+    "0ce7103aec546766649c182619d16aa6ad07439e4d0ebd16d95c5004afb3e56a"
+)
 PLUGIN_LAYER = f"""{BEGIN_MARKER}
 # This source checkout is dedicated to the community example. Keep the complete
 # managed Hermes image contract above and add only this recipe's files.
 COPY local-plugins/ask-nemoclaw/ /sandbox/.hermes/plugins/ask-nemoclaw/
 COPY local-relay/browser-context-knowledge-assistant/plugins.toml \\
      /etc/nemo-relay/config/plugins.toml
-RUN /opt/hermes/.venv/bin/python -c \\
-       'from importlib.metadata import version; print("Using Hermes-bundled nemo-relay", version("nemo-relay"))' \\
+ADD --checksum=sha256:{RELAY_WHEEL_SHA256} \\
+    {RELAY_WHEEL_URL} \\
+    /tmp/{RELAY_WHEEL_FILENAME}
+RUN test "$(dpkg --print-architecture)" = "amd64" \\
+    && uv pip install --python /opt/hermes/.venv/bin/python \\
+       --no-cache --no-deps /tmp/{RELAY_WHEEL_FILENAME} \\
+    && /opt/hermes/.venv/bin/python -c \\
+       'from importlib.metadata import version; assert version("nemo-relay") == "{RELAY_VERSION}"' \\
     && uv pip check --python /opt/hermes/.venv/bin/python \\
+    && rm /tmp/{RELAY_WHEEL_FILENAME} \\
     && mkdir -p /sandbox/.hermes-data/nemo-relay/atif \\
     && chown -R sandbox:sandbox \\
        /sandbox/.hermes/plugins/ask-nemoclaw \\
