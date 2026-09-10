@@ -63,6 +63,8 @@ let activeJob = null;
 let pollTimer = null;
 let retryAction = null;
 let pendingSubmission = null;
+let dashboardSessionToken = null;
+let dashboardSessionTokenOrigin = null;
 
 function originPermission(origin) {
   return `${origin}/*`;
@@ -104,6 +106,8 @@ async function saveSettings(event) {
     return;
   }
   nemoClawOrigin = candidate;
+  dashboardSessionToken = null;
+  dashboardSessionTokenOrigin = null;
   await chrome.storage.local.set({ askNemoClawOrigin: candidate });
   await chrome.storage.local.remove("askNemoClawConversationId");
   activeConversationId = null;
@@ -517,12 +521,58 @@ function authenticationError() {
   return error;
 }
 
+function isLoopbackOrigin(origin) {
+  try {
+    return new Set(["127.0.0.1", "localhost", "[::1]"]).has(new URL(origin).hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function parseLoopbackDashboardToken(html) {
+  const match = String(html || "").slice(0, 2_000_000).match(
+    /window\.__HERMES_SESSION_TOKEN__\s*=\s*("(?:\\.|[^"\\])*")/
+  );
+  if (!match) return null;
+  try {
+    const token = JSON.parse(match[1]);
+    return typeof token === "string" && token.length >= 16 && token.length <= 512
+      ? token
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function loadLoopbackDashboardToken(signal) {
+  if (!isLoopbackOrigin(nemoClawOrigin)) return null;
+  if (dashboardSessionTokenOrigin === nemoClawOrigin && dashboardSessionToken) {
+    return dashboardSessionToken;
+  }
+  const response = await fetch(`${nemoClawOrigin}/`, {
+    credentials: "include",
+    cache: "no-store",
+    redirect: "manual",
+    signal
+  });
+  if (!response.ok) return null;
+  const token = parseLoopbackDashboardToken(await response.text());
+  if (!token) return null;
+  dashboardSessionToken = token;
+  dashboardSessionTokenOrigin = nemoClawOrigin;
+  return token;
+}
+
 async function authenticatedFetch(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HERMES_REQUEST_TIMEOUT_MS);
   try {
+    const headers = new Headers(options.headers || {});
+    const loopbackToken = await loadLoopbackDashboardToken(controller.signal);
+    if (loopbackToken) headers.set("X-Hermes-Session-Token", loopbackToken);
     const response = await fetch(url, {
       ...options,
+      headers,
       credentials: "include",
       cache: "no-store",
       redirect: "manual",

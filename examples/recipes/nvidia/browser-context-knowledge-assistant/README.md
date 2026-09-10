@@ -263,7 +263,9 @@ NemoHermes origin and requests its Chrome host permission. **Open NemoClaw**
 opens the selected origin so the user can complete normal authentication.
 **Check** retries the read-only API request after sign-in or service recovery.
 Authentication remains in the NemoHermes browser session; the extension never
-stores a username, password, API key, or cookie.
+stores a username, password, API key, token, or cookie. A loopback dashboard
+injects an ephemeral Hermes session token into its root page; the extension
+reads that token for API calls and keeps it only in extension memory.
 
 Every message recaptures the available page text and visible viewport. A page
 that exposes no readable DOM text can still be sent using its viewport image.
