@@ -25,6 +25,15 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
 test -s "$ROOT/build/loopback-verification-extension/manifest.json"
+test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
+test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
+test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
+grep -Fq 'sidepanel_browser_fixture.html' "$ROOT/tests/demo_screenshot_fixture.html"
+if grep -Eiq 'confidential compute|SEV-SNP|KubeVirt|Google Docs.*branding' \
+  "$ROOT/assets/ask-nemoclaw-architecture.svg"; then
+  printf 'community architecture unexpectedly contains deployment-specific routing\n' >&2
+  exit 1
+fi
 
 IMAGE_FIXTURE="$(mktemp -d)"
 trap 'rm -rf -- "$IMAGE_FIXTURE"' EXIT

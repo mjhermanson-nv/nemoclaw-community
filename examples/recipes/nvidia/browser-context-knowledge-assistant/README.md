@@ -25,6 +25,15 @@ to the user's prompt.
 The extension does not modify the page. It does not contain a Hermes password,
 an inference API key, or an OAuth token.
 
+## Screenshot
+
+![Ask NemoClaw explains a synthetic browser page using readable text and the visible viewport](assets/ask-nemoclaw-browser-context.png)
+
+This reproducible fixture shows the current extension interface without using a
+private endpoint, personal profile, credential, or retained production
+conversation. The page and response are synthetic; the same extension code is
+used for the side-panel rendering.
+
 ## At A Glance
 
 | Question | Answer |
@@ -44,40 +53,13 @@ an inference API key, or an OAuth token.
 
 ## Architecture
 
-```text
-Managed or developer Chrome
-  Ask NemoClaw browser extension
-  - activeTab grant after toolbar click
-  - fresh readable-text and visible-viewport capture on every Send
-  - no packaged credentials
-             |
-             | one exact authenticated HTTPS origin
-             v
-Operator HTTPS ingress
-  - TLS and normal Hermes authentication
-             |
-             v
-Linux host running NemoClaw
-  NemoClaw-managed dashboard forward
-             |
-             v
-  OpenShell sandbox
-    Hermes dashboard
-      Ask NemoClaw Hermes plugin
-      - origin and signed-in-user checks
-      - isolated retained conversation mapping
-      - input limits, rate limits, cancellation, timeouts
-      - Hermes JSON-RPC sessions without PTYs
-      Hermes observability/nemo_relay plugin
-      - one local ATIF file per Hermes session
-      - no external trace collector in the base recipe
-             |
-             | provider route controlled by NemoClaw and OpenShell
-             v
-Configured inference provider
-  - multimodal primary model, or
-  - text primary model plus an auxiliary vision model
-```
+![Ask NemoClaw architecture showing the Chrome permission boundary, NemoClaw runtime, Hermes plugin, OpenShell controls, inference provider, optional skills, and local traces](assets/ask-nemoclaw-architecture.png)
+
+Chrome grants temporary access to the active tab after the user selects the
+extension. Ask NemoClaw sends the prompt and bounded browser context to one
+authenticated Hermes origin. The plugin maps each browser conversation to a
+separate non-PTY Hermes session. Hermes selects installed skills and tools,
+OpenShell applies runtime controls, and NeMo Relay records local ATIF traces.
 
 The Chrome extension can reach only the configured Hermes origin. An
 authenticated HTTPS ingress is the recommended community deployment. An HTTP

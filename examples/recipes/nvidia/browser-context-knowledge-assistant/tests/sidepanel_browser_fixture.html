@@ -59,13 +59,13 @@
       globalThis.ASK_NEMOCLAW_CONFIG = { hermesOrigin: "https://hermes.example.com" };
       const conversations = [{
         conversation_id: "fixtureConversationId000001",
-        title: "Synthetic engineering page",
+        title: "NemoClaw browser context demo",
         message_count: 2
       }];
       const histories = {
         fixtureConversationId000001: [
-          { message_id: 1, job_id: "fixtureJobId000000000001", role: "user", content: "Summarize this page." },
-          { message_id: 2, job_id: "fixtureJobId000000000001", role: "assistant", content: "A concise summary.", result: { format: "text", text: "A concise summary with **verified synthetic context**." } }
+          { message_id: 1, job_id: "fixtureJobId000000000001", role: "user", content: "Explain what I am looking at." },
+          { message_id: 2, job_id: "fixtureJobId000000000001", role: "assistant", content: "Viewport explanation.", result: { format: "text", text: "You are viewing a browser demonstration of **Ask NemoClaw**. The page presents a video-style frame with a terminal example, while this side panel uses the readable page text and rendered viewport as context.\n\n- **Current page:** NemoClaw browser context demo\n- **Visible workflow:** Browser tab → Ask NemoClaw → Hermes agent\n- **Agent behavior:** The user supplies the task; Hermes selects relevant installed skills and tools.\n\nThe extension does not modify the page." } }
         ]
       };
       let pollCount = 0;
@@ -76,7 +76,7 @@
       });
       globalThis.chrome = {
         tabs: {
-          query: async () => [{ id: 17, windowId: 3, title: "Synthetic engineering page", url: "https://example.com/engineering" }],
+          query: async () => [{ id: 17, windowId: 3, title: "NemoClaw browser context demo", url: "https://example.com/nemoclaw-demo" }],
           captureVisibleTab: async () => {
             const canvas = document.createElement("canvas");
             canvas.width = 1280;
@@ -92,7 +92,7 @@
           create: async () => ({})
         },
         scripting: {
-          executeScript: async () => [{ result: { page_title: "Synthetic engineering page", page_text: "Synthetic browser content version two.", selected_text: "", page_text_truncated: false } }]
+          executeScript: async () => [{ result: { page_title: "NemoClaw browser context demo", page_text: "A synthetic video-style demonstration of browser context sent to a NemoClaw agent running with Hermes.", selected_text: "", page_text_truncated: false } }]
         },
         storage: {
           session: { get: async () => ({ askNemoClawTarget: null }) },
