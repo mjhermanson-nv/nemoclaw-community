@@ -29,6 +29,8 @@ assert.match(source, /await refreshActivePage\(false\)[\s\S]*await createConvers
 assert.match(source, /redirect: "manual"/);
 assert.match(source, /window\\\.\__HERMES_SESSION_TOKEN__/);
 assert.match(source, /X-Hermes-Session-Token/);
+assert.match(source, /fetch\(nemoClawDashboardUrl/);
+assert.doesNotMatch(source, /if \(!isLoopbackOrigin\(nemoClawOrigin\)\) return null/);
 assert.doesNotMatch(source, /storage\.(?:local|sync)\.set\([^)]*(?:SessionToken|sessionToken|token)/s);
 assert.match(source, /response\.type === "opaqueredirect"/);
 assert.match(source, /response\.headers\.get\("content-type"\)\?\.includes\("text\/html"\)/);
@@ -45,12 +47,12 @@ assert.match(html, /id="nemoclaw-service-url"/);
 assert.match(html, /id="nemoclaw-dashboard-url"/);
 assert.match(html, /ephemeral session token/);
 assert.doesNotMatch(source, /storage\.(?:local|sync)\.set\([^)]*(?:page_text|result|messages)/s);
-const tokenParserStart = source.indexOf("function parseLoopbackDashboardToken");
-const tokenParserEnd = source.indexOf("async function loadLoopbackDashboardToken", tokenParserStart);
+const tokenParserStart = source.indexOf("function parseDashboardSessionToken");
+const tokenParserEnd = source.indexOf("async function loadDashboardSessionToken", tokenParserStart);
 assert.ok(tokenParserStart >= 0 && tokenParserEnd > tokenParserStart);
 const tokenContext = {};
 vm.runInNewContext(
-  `${source.slice(tokenParserStart, tokenParserEnd)}\nglobalThis.parseToken = parseLoopbackDashboardToken;`,
+  `${source.slice(tokenParserStart, tokenParserEnd)}\nglobalThis.parseToken = parseDashboardSessionToken;`,
   tokenContext
 );
 assert.equal(

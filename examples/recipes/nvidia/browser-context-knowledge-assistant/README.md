@@ -231,7 +231,10 @@ supported NemoClaw path for Hermes runtime additions is a custom sandbox image.
 The setup script finds the source checkout used by the installed `nemohermes`
 installation, copies the `ask-nemoclaw` Hermes plugin and local Relay
 configuration into that checkout, and enables both additions through
-NemoClaw's managed Hermes policy. It installs the checksum-pinned NeMo Relay
+NemoClaw's managed Hermes policy. The preparation also adds
+`plugins.enabled` to the reviewed dashboard-seeding paths so Hermes's isolated
+dashboard process authorizes the same plugin API as the main agent process. It
+installs the checksum-pinned NeMo Relay
 `0.7.2` x86-64 wheel and verifies the complete Python environment with
 `uv pip check`; this version satisfies the Hermes dependency ranges tested by
 the example. It also preserves the built-in `nemoclaw` plugin and the rest of
@@ -271,34 +274,54 @@ nemohermes ask-nemoclaw status
 nemohermes ask-nemoclaw dashboard-url --quiet
 ```
 
-### 4. Provide an authenticated route
+### 4. Provide an authenticated Brev route
 
 For a shared Hermes deployment, place Hermes behind the platform's authenticated
-TLS ingress and retain the standard plugin path. Keep the normal Hermes sign-in
-flow. Do not publish an unauthenticated Hermes port.
+TLS ingress. Do not publish an unauthenticated Hermes port.
 
-The NemoClaw Brev launchable already uses its root Nginx server for the
-management dashboard and API. Do not replace that server and do not expose the
-complete Hermes dashboard. Instead, the optional file
-`deploy/nginx/ask-nemoclaw-location.conf` maps only `/ask-nemoclaw/` to the
-standard Hermes plugin API. Copy it to the host and include it inside the
-existing authenticated Brev Nginx `server` block:
+The NemoClaw Brev launchable already uses Nginx on port 80 behind an
+authenticated Brev Secure Link. Keep that server. The configuration helper:
+
+- preserves the Brev management interface at `/dashboard`;
+- routes `/` to the Hermes dashboard;
+- routes `/ask-nemoclaw/` to the plugin API; and
+- rewrites only the upstream Host and Origin values that Hermes validates.
+
+Run the helper after the sandbox reports Ready:
+
+```bash
+sudo -v
+bash scripts/configure-brev-nginx.sh
+```
+
+The default dashboard port is `18789`. If NemoClaw selected another port, pass
+it explicitly:
+
+```bash
+NEMOCLAW_DASHBOARD_PORT=18790 bash scripts/configure-brev-nginx.sh
+```
+
+The helper installs `deploy/nginx/ask-nemoclaw-location.conf` as the following
+include inside the existing authenticated Brev Nginx `server` block:
 
 ```nginx
 include /etc/nginx/snippets/ask-nemoclaw-location.conf;
 ```
 
-Then validate the complete Nginx configuration before reloading it:
+It creates timestamped backups, validates the complete Nginx configuration,
+and reloads Nginx only after validation succeeds. Confirm both retained routes:
 
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
+```text
+https://<brev-secure-link>/            Hermes dashboard
+https://<brev-secure-link>/dashboard  Brev management dashboard
 ```
 
 This adapter relies on the prepared image's loopback development mode and the
 Brev Secure Link authentication boundary. It is intended for a single-user
-Brev demonstration. A shared deployment must use normal Hermes session
-authentication instead.
+Brev demonstration. The extension obtains Hermes's standard ephemeral session
+token from the protected dashboard page, retains it only in extension memory,
+and sends it to the plugin API. The adapter does not create a token endpoint or
+store a credential.
 
 For a Brev developer test, a workstation loopback forward is an optional
 substitute for the HTTPS ingress:
@@ -348,7 +371,7 @@ second and third arguments:
 bash scripts/build-extension.sh \
   https://nemoclaw.example.gobrev.dev \
   /ask-nemoclaw \
-  /dashboard
+  /
 ```
 
 The generated directory contains the exact host permission for that initial
@@ -356,8 +379,8 @@ origin. It is ignored by Git and contains no credential. The extension's
 **Settings** control can later request permission for another exact HTTPS or
 loopback origin. Chrome displays the additional host permission request to the
 user. For direct Hermes, enter the standard plugin service URL. For a Brev test,
-enter the adapter URL ending in `/ask-nemoclaw` and the management dashboard URL
-ending in `/dashboard`.
+enter the adapter URL ending in `/ask-nemoclaw` and the Hermes dashboard URL at
+the same origin root.
 
 ## Use the Assistant
 
@@ -372,10 +395,11 @@ service and dashboard URLs and requests the required Chrome host permission.
 **Open NemoClaw** opens the configured dashboard URL so the user can complete
 normal authentication.
 **Check** retries the read-only API request after sign-in or service recovery.
-Authentication remains in the NemoHermes browser session; the extension never
-stores a username, password, API key, token, or cookie. A loopback dashboard
-injects an ephemeral Hermes session token into its root page; the extension
-reads that token for API calls and keeps it only in extension memory.
+Authentication remains at the configured protected dashboard origin; the
+extension never stores a username, password, API key, token, or cookie. Hermes
+injects an ephemeral session token into its dashboard page. After the user
+grants access to that exact origin, the extension reads the token for API calls
+and keeps it only in extension memory.
 
 Every message recaptures the available page text and visible viewport. A page
 that exposes no readable DOM text can still be sent using its viewport image.

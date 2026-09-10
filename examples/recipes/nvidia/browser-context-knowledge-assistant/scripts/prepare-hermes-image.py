@@ -19,6 +19,12 @@ MANAGED_POLICY_BEFORE = '      enabled: ["nemoclaw"],'
 MANAGED_POLICY_AFTER = (
     '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"],'
 )
+MANAGED_PATHS_BEFORE = '  "updates.refresh_cua_driver",\n] as const;'
+MANAGED_PATHS_AFTER = (
+    '  "updates.refresh_cua_driver",\n'
+    '  "plugins.enabled",\n'
+    '] as const;'
+)
 RELAY_VERSION = "0.7.2"
 RELAY_WHEEL_FILENAME = (
     "nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64."
@@ -68,6 +74,24 @@ ENV HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1
 """
 
 
+def update_managed_policy(text: str) -> str:
+    if MANAGED_POLICY_AFTER not in text and MANAGED_POLICY_BEFORE not in text:
+        raise SystemExit(
+            "The managed Hermes plugin policy has changed; review the current "
+            "NemoClaw plugin configuration before applying this example"
+        )
+    if MANAGED_PATHS_AFTER not in text and MANAGED_PATHS_BEFORE not in text:
+        raise SystemExit(
+            "The managed Hermes dashboard policy has changed; review the current "
+            "NemoClaw dashboard seeding contract before applying this example"
+        )
+    return text.replace(
+        MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
+    ).replace(
+        MANAGED_PATHS_BEFORE, MANAGED_PATHS_AFTER, 1
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Prepare the managed NemoClaw Hermes image for this recipe"
@@ -94,6 +118,7 @@ def main() -> None:
         raise SystemExit("--nemoclaw-source must be a NemoClaw source checkout")
 
     text = dockerfile.read_text(encoding="utf-8")
+    policy_text = plugin_config.read_text(encoding="utf-8")
     if (BEGIN_MARKER in text) != (END_MARKER in text):
         raise SystemExit(
             "The managed example layer is incomplete; restore a clean Hermes "
@@ -108,6 +133,12 @@ def main() -> None:
             print(f"Updated browser context assistant image layer: {dockerfile}")
         else:
             print(f"Browser context assistant image layer is current: {dockerfile}")
+        updated_policy = update_managed_policy(policy_text)
+        if updated_policy != policy_text:
+            plugin_config.write_text(updated_policy, encoding="utf-8")
+            print(f"Updated managed plugin configuration: {plugin_config}")
+        else:
+            print(f"Managed plugin configuration is current: {plugin_config}")
         return
     if ANCHOR not in text:
         raise SystemExit(
@@ -115,15 +146,7 @@ def main() -> None:
             "NemoClaw plugin installation guide before applying this example"
         )
 
-    policy_text = plugin_config.read_text(encoding="utf-8")
-    if (
-        MANAGED_POLICY_AFTER not in policy_text
-        and MANAGED_POLICY_BEFORE not in policy_text
-    ):
-        raise SystemExit(
-            "The managed Hermes plugin policy has changed; review the current "
-            "NemoClaw plugin configuration before applying this example"
-        )
+    updated_policy = update_managed_policy(policy_text)
 
     destinations = (
         (PLUGIN_SOURCE, source / "local-plugins" / "ask-nemoclaw"),
@@ -145,9 +168,9 @@ def main() -> None:
     dockerfile.write_text(
         text.replace(ANCHOR, PLUGIN_LAYER + ANCHOR, 1), encoding="utf-8"
     )
-    if MANAGED_POLICY_BEFORE in policy_text:
+    if updated_policy != policy_text:
         plugin_config.write_text(
-            policy_text.replace(MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1),
+            updated_policy,
             encoding="utf-8",
         )
 
