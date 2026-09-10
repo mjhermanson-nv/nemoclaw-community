@@ -175,6 +175,9 @@ configuration into that checkout, and enables both additions through
 NemoClaw's managed Hermes policy. It uses the NeMo Relay version already bundled
 with Hermes so the image preserves Hermes's tested dependency constraints. It
 also preserves the built-in `nemoclaw` plugin and the rest of the standard image.
+The script places the prepared Dockerfile at the NemoClaw repository root so
+the custom build context includes the repository-level `agents/` and `tools/`
+directories required by the maintained Hermes image.
 
 ```bash
 bash scripts/onboard.sh
