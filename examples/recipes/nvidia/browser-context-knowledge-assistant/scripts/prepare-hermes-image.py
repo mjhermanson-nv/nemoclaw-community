@@ -37,6 +37,7 @@ RUN /opt/hermes/.venv/bin/python -c \\
     && chmod 555 /etc/nemo-relay /etc/nemo-relay/config \\
     && chmod 444 /etc/nemo-relay/config/plugins.toml
 ENV HERMES_NEMO_RELAY_PLUGINS_TOML=/etc/nemo-relay/config/plugins.toml
+ENV HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1
 {END_MARKER}
 
 """

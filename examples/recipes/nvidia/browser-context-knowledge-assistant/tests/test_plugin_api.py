@@ -483,6 +483,22 @@ class ConversationApiTests(unittest.TestCase):
             asyncio.run(module.list_conversations(_FakeRequest(owner=None)))
         self.assertEqual(unauthenticated.exception.status_code, 401)
 
+        with mock.patch.dict(
+            os.environ, {"HERMES_ASK_NEMOCLAW_LOOPBACK_MODE": "1"}
+        ):
+            local = asyncio.run(
+                module.list_conversations(
+                    _FakeRequest(
+                        owner=None,
+                        headers={"host": "127.0.0.1:18789"},
+                    )
+                )
+            )
+            self.assertEqual(_response_json(local), {"conversations": []})
+            with self.assertRaises(HTTPException) as external:
+                asyncio.run(module.list_conversations(_FakeRequest(owner=None)))
+            self.assertEqual(external.exception.status_code, 401)
+
         conversation_id = self.create_conversation()
         with self.assertRaises(HTTPException) as missing_context:
             self.send(conversation_id, "Question", "", "g" * 24)

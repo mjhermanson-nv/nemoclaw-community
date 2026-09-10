@@ -62,6 +62,8 @@ if grep -Eq 'files\.pythonhosted|uv pip install.*nemo.?relay' \
 fi
 grep -Fq 'HERMES_NEMO_RELAY_PLUGINS_TOML=/etc/nemo-relay/config/plugins.toml' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"]' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 grep -Fq 'output_directory = "/sandbox/.hermes-data/nemo-relay/atif"' \

@@ -5,6 +5,8 @@
 
 The plugin intentionally uses the existing in-process JSON-RPC dispatcher.
 Each prompt receives a new Hermes session and never allocates a PTY.
+Loopback-only developer deployments may explicitly use one local owner because
+Hermes does not create an application session for its loopback dashboard.
 """
 
 from __future__ import annotations
@@ -34,6 +36,8 @@ router = APIRouter()
 
 _EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 _DEFAULT_EXTENSION_ID = "fiefoieocpacddeapdfmnfacaahpcnad"
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_LOOPBACK_OWNER = "ask-nemoclaw-loopback-development"
 
 _MAX_URL_CHARS = 2048
 _MAX_PAGE_TITLE_CHARS = 512
@@ -318,9 +322,13 @@ def _context_hash(
 def _owner(request: Request) -> str:
     session = getattr(request.state, "session", None)
     owner = str(getattr(session, "user_id", "") or "").strip()
-    if not owner:
-        raise HTTPException(status_code=401, detail="Hermes authentication is required")
-    return owner
+    if owner:
+        return owner
+    if os.environ.get("HERMES_ASK_NEMOCLAW_LOOPBACK_MODE") == "1":
+        hostname = (urlsplit(_external_request_origin(request)).hostname or "").lower()
+        if hostname in _LOOPBACK_HOSTS:
+            return _LOOPBACK_OWNER
+    raise HTTPException(status_code=401, detail="Hermes authentication is required")
 
 
 def _external_request_origin(request: Request) -> str:
