@@ -19,8 +19,15 @@ fi
 
 python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOURCE"
 
+# NemoClaw uses the directory containing --from as the Docker build context.
+# The managed Hermes Dockerfile copies repository-root paths such as tools/ and
+# agents/, so place the prepared Dockerfile at the repository root.
+CUSTOM_DOCKERFILE="$NEMOCLAW_SOURCE/Dockerfile.ask-nemoclaw"
+cp "$NEMOCLAW_SOURCE/agents/hermes/Dockerfile" "$CUSTOM_DOCKERFILE"
+
 printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
+printf 'Custom Dockerfile: %s\n' "$CUSTOM_DOCKERFILE"
 nemohermes onboard \
   --name "$SANDBOX_NAME" \
-  --from "$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"
+  --from "$CUSTOM_DOCKERFILE"
