@@ -5,12 +5,16 @@
 set -Eeuo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-browser-context-assistant}"
+SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-ask-nemoclaw}"
 NEMOCLAW_SOURCE="${NEMOCLAW_SOURCE:-}"
 
 if [[ -z "$NEMOCLAW_SOURCE" ]]; then
-  NEMOHERMES_BIN="$(readlink -f "$(command -v nemohermes)")"
-  NEMOCLAW_SOURCE="$(CDPATH= cd -- "$(dirname -- "$NEMOHERMES_BIN")/.." && pwd)"
+  if [[ -d "$HOME/.nemoclaw/source/.git" ]]; then
+    NEMOCLAW_SOURCE="$HOME/.nemoclaw/source"
+  else
+    NEMOHERMES_BIN="$(readlink -f "$(command -v nemohermes)")"
+    NEMOCLAW_SOURCE="$(CDPATH= cd -- "$(dirname -- "$NEMOHERMES_BIN")/.." && pwd)"
+  fi
 fi
 
 python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOURCE"

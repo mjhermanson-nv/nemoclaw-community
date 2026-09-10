@@ -46,18 +46,24 @@ printf '%s\n' \
   '      enabled: ["nemoclaw"],' \
   '    },' \
   '};' \
-  > "$IMAGE_FIXTURE/agents/hermes/config/managed-policy.ts"
+  > "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
+"$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1
 grep -Fq 'COPY local-plugins/ask-nemoclaw/' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-grep -Fq 'ADD --checksum=sha256:ed2408317576403b4bde5662e1dcb852abf67edeb52e97671cf27e0f153f3e21' \
-  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'Using Hermes-bundled nemo-relay' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+if grep -Eq 'files\.pythonhosted|uv pip install.*nemo.?relay' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"; then
+  printf 'prepared image unexpectedly replaces the Hermes-bundled Relay package\n' >&2
+  exit 1
+fi
 grep -Fq 'HERMES_NEMO_RELAY_PLUGINS_TOML=/etc/nemo-relay/config/plugins.toml' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"]' \
-  "$IMAGE_FIXTURE/agents/hermes/config/managed-policy.ts"
+  "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 grep -Fq 'output_directory = "/sandbox/.hermes-data/nemo-relay/atif"' \
   "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 if grep -Eq 'opentelemetry|https?://' \

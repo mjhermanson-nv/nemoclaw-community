@@ -19,31 +19,15 @@ MANAGED_POLICY_BEFORE = '      enabled: ["nemoclaw"],'
 MANAGED_POLICY_AFTER = (
     '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"],'
 )
-RELAY_WHEEL_URL = (
-    "https://files.pythonhosted.org/packages/70/26/"
-    "e602c84437dd0ca1cbe01e8acf448d0beb37596dc346aa5bc606a9104436/"
-    "nemo_relay-0.8.0-cp311-abi3-manylinux_2_17_x86_64."
-    "manylinux2014_x86_64.whl"
-)
-RELAY_WHEEL_SHA256 = (
-    "ed2408317576403b4bde5662e1dcb852abf67edeb52e97671cf27e0f153f3e21"
-)
 PLUGIN_LAYER = f"""{BEGIN_MARKER}
 # This source checkout is dedicated to the community example. Keep the complete
 # managed Hermes image contract above and add only this recipe's files.
 COPY local-plugins/ask-nemoclaw/ /sandbox/.hermes/plugins/ask-nemoclaw/
 COPY local-relay/browser-context-knowledge-assistant/plugins.toml \\
      /etc/nemo-relay/config/plugins.toml
-ADD --checksum=sha256:{RELAY_WHEEL_SHA256} \\
-    {RELAY_WHEEL_URL} \\
-    /tmp/nemo-relay.whl
-RUN test "$(dpkg --print-architecture)" = "amd64" \\
-    && uv pip install --python /opt/hermes/.venv/bin/python \\
-       --no-cache --no-deps /tmp/nemo-relay.whl \\
-    && /opt/hermes/.venv/bin/python -c \\
-       'from importlib.metadata import version; assert version("nemo-relay") == "0.8.0"' \\
+RUN /opt/hermes/.venv/bin/python -c \\
+       'from importlib.metadata import version; print("Using Hermes-bundled nemo-relay", version("nemo-relay"))' \\
     && uv pip check --python /opt/hermes/.venv/bin/python \\
-    && rm /tmp/nemo-relay.whl \\
     && mkdir -p /sandbox/.hermes-data/nemo-relay/atif \\
     && chown -R sandbox:sandbox \\
        /sandbox/.hermes/plugins/ask-nemoclaw \\
@@ -67,17 +51,37 @@ def main() -> None:
 
     source = args.nemoclaw_source.resolve()
     dockerfile = source / "agents" / "hermes" / "Dockerfile"
-    managed_policy = source / "agents" / "hermes" / "config" / "managed-policy.ts"
+    config_dir = source / "agents" / "hermes" / "config"
+    plugin_config_candidates = (
+        config_dir / "hermes-config.ts",
+        config_dir / "managed-policy.ts",
+    )
+    plugin_config = next(
+        (candidate for candidate in plugin_config_candidates if candidate.is_file()),
+        None,
+    )
     if (
         not (source / ".git").exists()
         or not dockerfile.is_file()
-        or not managed_policy.is_file()
+        or plugin_config is None
     ):
         raise SystemExit("--nemoclaw-source must be a NemoClaw source checkout")
 
     text = dockerfile.read_text(encoding="utf-8")
+    if (BEGIN_MARKER in text) != (END_MARKER in text):
+        raise SystemExit(
+            "The managed example layer is incomplete; restore a clean Hermes "
+            "Dockerfile before continuing"
+        )
     if BEGIN_MARKER in text:
-        print(f"Browser context assistant image layer is already present: {dockerfile}")
+        start = text.index(BEGIN_MARKER)
+        finish = text.index(END_MARKER, start) + len(END_MARKER)
+        updated = text[:start] + PLUGIN_LAYER.strip() + text[finish:]
+        if updated != text:
+            dockerfile.write_text(updated, encoding="utf-8")
+            print(f"Updated browser context assistant image layer: {dockerfile}")
+        else:
+            print(f"Browser context assistant image layer is current: {dockerfile}")
         return
     if ANCHOR not in text:
         raise SystemExit(
@@ -85,7 +89,7 @@ def main() -> None:
             "NemoClaw plugin installation guide before applying this example"
         )
 
-    policy_text = managed_policy.read_text(encoding="utf-8")
+    policy_text = plugin_config.read_text(encoding="utf-8")
     if (
         MANAGED_POLICY_AFTER not in policy_text
         and MANAGED_POLICY_BEFORE not in policy_text
@@ -116,7 +120,7 @@ def main() -> None:
         text.replace(ANCHOR, PLUGIN_LAYER + ANCHOR, 1), encoding="utf-8"
     )
     if MANAGED_POLICY_BEFORE in policy_text:
-        managed_policy.write_text(
+        plugin_config.write_text(
             policy_text.replace(MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1),
             encoding="utf-8",
         )
@@ -124,7 +128,7 @@ def main() -> None:
     print(f"Copied plugin to: {destinations[0][1]}")
     print(f"Copied Relay configuration to: {destinations[1][1]}")
     print(f"Updated managed Dockerfile: {dockerfile}")
-    print(f"Updated managed plugin policy: {managed_policy}")
+    print(f"Updated managed plugin configuration: {plugin_config}")
 
 
 if __name__ == "__main__":

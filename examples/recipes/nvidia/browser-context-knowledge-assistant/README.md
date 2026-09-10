@@ -165,14 +165,11 @@ cd nemoclaw-community/examples/recipes/nvidia/browser-context-knowledge-assistan
 Start from a normal NemoClaw installation configured to use Hermes. The
 supported NemoClaw path for Hermes runtime additions is a custom sandbox image.
 The setup script finds the source checkout used by the installed `nemohermes`
-executable, copies the `ask-nemoclaw` Hermes plugin and local Relay configuration
-into that checkout, installs the checksum-pinned NeMo Relay 0.8.0 wheel, and
-enables both additions through NemoClaw's managed Hermes policy. It preserves
-the built-in `nemoclaw` Hermes plugin and the rest of the standard image.
-
-The pinned Relay wheel in this version is for Linux AMD64, matching the tested
-Brev launchable. The preparation step fails instead of silently using it on a
-different processor architecture.
+installation, copies the `ask-nemoclaw` Hermes plugin and local Relay
+configuration into that checkout, and enables both additions through
+NemoClaw's managed Hermes policy. It uses the NeMo Relay version already bundled
+with Hermes so the image preserves Hermes's tested dependency constraints. It
+also preserves the built-in `nemoclaw` plugin and the rest of the standard image.
 
 ```bash
 bash scripts/onboard.sh
@@ -182,17 +179,18 @@ Onboarding asks you to select an inference provider and enter its credential.
 Use the normal NemoClaw credential prompt. Do not place the credential in this
 repository or in the Chrome extension.
 
-The default sandbox name is `browser-context-assistant`. To use another name:
+The default sandbox name is `ask-nemoclaw`. To use another name of 19 or fewer
+characters:
 
 ```bash
-NEMOCLAW_SANDBOX_NAME=my-browser-assistant bash scripts/onboard.sh
+NEMOCLAW_SANDBOX_NAME=my-browser-agent bash scripts/onboard.sh
 ```
 
 Confirm readiness:
 
 ```bash
-nemohermes browser-context-assistant status
-nemohermes browser-context-assistant dashboard-url --quiet
+nemohermes ask-nemoclaw status
+nemohermes ask-nemoclaw dashboard-url --quiet
 ```
 
 ### 4. Provide the authenticated Hermes origin
@@ -298,7 +296,7 @@ Expected evidence:
   idempotency, bounded-image validation, same-session image attachment,
   cancellation, result parsing, and non-PTY checks; and
 - extension builds succeed for both HTTPS and optional HTTP loopback origins;
-- the prepared image layer contains the checksum-pinned NeMo Relay wheel,
+- the prepared image layer validates the Hermes-bundled NeMo Relay package,
   enables `observability/nemo_relay`, and configures only local ATIF output.
 
 For a live verification:
@@ -325,7 +323,7 @@ For a live verification:
 | `extension/` | Manifest V3 Chrome side-panel source. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
-| `scripts/prepare-hermes-image.py` | Adds the plugin, pinned Relay package, configuration, and managed enablement to the complete Hermes image source. |
+| `scripts/prepare-hermes-image.py` | Adds the plugin, Relay configuration, and managed enablement to the complete Hermes image source. |
 | `scripts/onboard.sh` | Builds and onboards the custom Hermes sandbox. |
 | `scripts/build-extension.sh` | Produces an unpacked extension for one exact Hermes origin. |
 | `scripts/check-connection.sh` | Checks the dashboard and plugin routes without credentials. |
@@ -345,8 +343,6 @@ For a live verification:
 - Local ATIF traces contain sensitive conversation and page context until the
   operator removes them. The example does not include retention or automatic
   deletion policy.
-- The pinned Relay wheel is Linux AMD64 only. A different architecture requires
-  a separately pinned wheel and checksum.
 - Central Chrome distribution requires normal Chrome Enterprise packaging,
   signing, and policy management outside this repository.
 
@@ -355,13 +351,13 @@ For a live verification:
 Stop the sandbox without deleting its state:
 
 ```bash
-nemohermes browser-context-assistant stop
+nemohermes ask-nemoclaw stop
 ```
 
 To remove the sandbox and its workspace, inspect the name first and then run:
 
 ```bash
-nemohermes browser-context-assistant destroy
+nemohermes ask-nemoclaw destroy
 ```
 
 The destroy command is destructive and asks for confirmation. Also stop or
