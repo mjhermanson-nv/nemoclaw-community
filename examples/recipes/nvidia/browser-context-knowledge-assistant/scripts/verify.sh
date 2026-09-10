@@ -69,12 +69,14 @@ test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.
 grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1
 grep -Fq 'COPY local-plugins/ask-nemoclaw/' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-grep -Fq 'Using Hermes-bundled nemo-relay' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-if grep -Eq 'files\.pythonhosted|uv pip install.*nemo.?relay' \
-  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"; then
-  printf 'prepared image unexpectedly replaces the Hermes-bundled Relay package\n' >&2
-  exit 1
-fi
+grep -Fq 'ADD --checksum=sha256:0ce7103aec546766649c182619d16aa6ad07439e4d0ebd16d95c5004afb3e56a' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'assert version("nemo-relay") == "0.7.2"' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'uv pip check --python /opt/hermes/.venv/bin/python' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'HERMES_NEMO_RELAY_PLUGINS_TOML=/etc/nemo-relay/config/plugins.toml' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1' \

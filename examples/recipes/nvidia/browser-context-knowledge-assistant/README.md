@@ -9,7 +9,7 @@
 | --- | --- |
 | Description | Adds an authenticated Chrome side panel that sends an arbitrary user prompt, readable page text, and the rendered visible viewport to a NemoClaw agent running with Hermes. |
 | Industry | ✨ Other |
-| Requirements | NemoClaw with Hermes · Docker · Chrome 116+ · inference provider API key · Brev or another Linux host |
+| Requirements | NemoClaw with Hermes · x86-64 Linux and Docker · Chrome 116+ · inference provider API key · Brev or another Linux host |
 | NemoClaw | Unpinned |
 | Harness | Hermes Unpinned |
 | OpenShell | Unpinned |
@@ -231,9 +231,11 @@ supported NemoClaw path for Hermes runtime additions is a custom sandbox image.
 The setup script finds the source checkout used by the installed `nemohermes`
 installation, copies the `ask-nemoclaw` Hermes plugin and local Relay
 configuration into that checkout, and enables both additions through
-NemoClaw's managed Hermes policy. It uses the NeMo Relay version already bundled
-with Hermes so the image preserves Hermes's tested dependency constraints. It
-also preserves the built-in `nemoclaw` plugin and the rest of the standard image.
+NemoClaw's managed Hermes policy. It installs the checksum-pinned NeMo Relay
+`0.7.2` x86-64 wheel and verifies the complete Python environment with
+`uv pip check`; this version satisfies the Hermes dependency ranges tested by
+the example. It also preserves the built-in `nemoclaw` plugin and the rest of
+the standard image.
 The script then uses NemoClaw's normal generated-image path. Do not add
 `--from`: current generated Hermes images require local BuildKit, while custom
 Dockerfiles intentionally remain on the OpenShell gateway builder trust
