@@ -11,6 +11,7 @@ node --check "$ROOT/extension/service-worker.js"
 node --check "$ROOT/extension/sidepanel.js"
 bash -n "$ROOT/scripts/check-connection.sh"
 bash -n "$ROOT/scripts/onboard.sh"
+bash -n "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
 grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
 if grep -Eq '^[[:space:]]*--from' "$ROOT/scripts/onboard.sh"; then
@@ -32,14 +33,16 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
   --hermes-origin https://nemoclaw.example.com \
   --service-path /ask-nemoclaw \
-  --dashboard-path /dashboard \
+  --dashboard-path / \
   --output "$ROOT/build/brev-verification-extension"
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
 test -s "$ROOT/build/loopback-verification-extension/manifest.json"
 grep -Fq 'servicePath: "/ask-nemoclaw"' "$ROOT/build/brev-verification-extension/config.js"
-grep -Fq 'dashboardPath: "/dashboard"' "$ROOT/build/brev-verification-extension/config.js"
+grep -Fq 'dashboardPath: "/"' "$ROOT/build/brev-verification-extension/config.js"
 grep -Fq 'location ^~ /ask-nemoclaw/' "$ROOT/deploy/nginx/ask-nemoclaw-location.conf"
+grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
+grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
@@ -56,6 +59,10 @@ mkdir -p "$IMAGE_FIXTURE/.git" "$IMAGE_FIXTURE/agents/hermes/config"
 printf '%s\n' '# managed Hermes image' '# Verify the immutable security package inventory in the completed image.' \
   > "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 printf '%s\n' \
+  'const MANAGED_POLICY_PATHS = [' \
+  '  "updates.refresh_cua_driver",' \
+  '] as const;' \
+  '' \
   'export const config = {' \
   '    plugins: {' \
   '      enabled: ["nemoclaw"],' \
@@ -84,6 +91,8 @@ grep -Fq 'HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1' \
 grep -Fq '/etc/nemoclaw/ask-nemoclaw-loopback-mode' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"]' \
+  "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
+grep -Fq '"plugins.enabled",' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 grep -Fq 'output_directory = "/sandbox/.hermes-data/nemo-relay/atif"' \
   "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
