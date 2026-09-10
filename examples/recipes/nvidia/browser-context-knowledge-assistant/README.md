@@ -87,7 +87,9 @@ external tools.
 
 The base recipe:
 
-- requires an authenticated Hermes session;
+- requires an authenticated Hermes session for shared HTTPS deployments;
+- permits a single local development identity only when the prepared image
+  explicitly enables loopback mode and the request host is loopback;
 - verifies the browser origin;
 - strips URL credentials, fragments, and query parameters for every site;
 - limits request and response sizes;
@@ -212,10 +214,12 @@ brev port-forward <brev-instance-name> -p 18789:18789
 If NemoClaw selected a different dashboard port, use that number on both sides.
 Keep this terminal running while you use the extension.
 
-Open `http://127.0.0.1:18789/` in Chrome and complete the normal Hermes sign-in
-flow before using the extension. This loopback is for the Brev test path; a
-centrally hosted extension uses the HTTPS origin directly and does not require
-a workstation tunnel.
+Open `http://127.0.0.1:18789/` in Chrome. Hermes does not present a sign-in flow
+for this loopback-only mode. Access is instead limited by the authenticated Brev
+or SSH tunnel. The example assigns all requests on that one local endpoint to a
+single development identity, so do not use loopback mode as a shared service.
+This loopback path is for Brev developer testing; a centrally hosted extension
+uses authenticated HTTPS ingress and does not require a workstation tunnel.
 
 ### 5. Build and load the Chrome extension
 
@@ -239,8 +243,11 @@ For a centrally hosted Hermes deployment, build with its HTTPS origin instead:
 bash scripts/build-extension.sh https://hermes.example.com
 ```
 
-The generated directory contains the exact host permission for that one Hermes
-origin. It is ignored by Git and contains no credential.
+The generated directory contains the exact host permission for that initial
+Hermes origin. It is ignored by Git and contains no credential. The extension's
+**Settings** control can later request permission for another exact HTTPS or
+loopback NemoHermes origin. Chrome displays the additional host permission
+request to the user.
 
 ## Use the Assistant
 
@@ -250,9 +257,12 @@ origin. It is ignored by Git and contains no credential.
 3. Enter any prompt and select **Send**.
 
 The connection indicator reports whether the configured Hermes API is signed
-in, requires authentication, or is unavailable. **Open Hermes** opens the fixed
-Hermes origin so the user can complete normal authentication. **Check** retries
-the read-only API request after sign-in or service recovery.
+in, requires authentication, or is unavailable. **Settings** changes the
+NemoHermes origin and requests its Chrome host permission. **Open NemoClaw**
+opens the selected origin so the user can complete normal authentication.
+**Check** retries the read-only API request after sign-in or service recovery.
+Authentication remains in the NemoHermes browser session; the extension never
+stores a username, password, API key, or cookie.
 
 Every message recaptures the available page text and visible viewport. A page
 that exposes no readable DOM text can still be sent using its viewport image.

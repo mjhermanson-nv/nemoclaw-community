@@ -23,7 +23,22 @@
           <span id="connection-status" class="connection-status" data-state="checking" aria-live="polite">Checking NemoClaw…</span>
           <button id="check-connection-button" class="secondary compact" type="button">Check</button>
           <button id="open-nemoclaw-button" class="secondary compact" type="button">Open NemoClaw</button>
+          <button id="settings-button" class="secondary compact" type="button">Settings</button>
         </div>
+        <section id="settings-card" class="card settings-card" hidden aria-label="NemoClaw settings">
+          <form id="settings-form">
+            <label for="nemoclaw-origin">NemoHermes dashboard URL</label>
+            <input id="nemoclaw-origin" name="nemoclaw-origin" type="url" required
+                   placeholder="https://hermes.example.com">
+            <p class="settings-help">Use HTTPS for a shared deployment. HTTP is accepted only for localhost or 127.0.0.1 development tunnels.</p>
+            <p class="settings-help"><strong>Authentication:</strong> credentials remain in the normal NemoHermes browser session. This extension does not store a username, password, API key, or cookie.</p>
+            <p id="settings-error" class="settings-error" hidden></p>
+            <div class="button-row">
+              <button id="save-settings-button" type="submit">Save and connect</button>
+              <button id="cancel-settings-button" class="secondary" type="button">Cancel</button>
+            </div>
+          </form>
+        </section>
         <label for="conversation-select">Recent conversation</label>
         <div class="toolbar-row">
           <select id="conversation-select" aria-label="Recent conversation"></select>
