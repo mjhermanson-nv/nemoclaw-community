@@ -31,7 +31,7 @@
             <input id="nemoclaw-origin" name="nemoclaw-origin" type="url" required
                    placeholder="https://hermes.example.com">
             <p class="settings-help">Use HTTPS for a shared deployment. HTTP is accepted only for localhost or 127.0.0.1 development tunnels.</p>
-            <p class="settings-help"><strong>Authentication:</strong> credentials remain in the normal NemoHermes browser session. This extension does not store a username, password, API key, or cookie.</p>
+            <p class="settings-help"><strong>Authentication:</strong> shared deployments use the normal NemoHermes browser session. For a loopback dashboard, the extension reads Hermes's ephemeral session token from the dashboard page and keeps it only in extension memory. It does not store a username, password, API key, token, or cookie.</p>
             <p id="settings-error" class="settings-error" hidden></p>
             <div class="button-row">
               <button id="save-settings-button" type="submit">Save and connect</button>

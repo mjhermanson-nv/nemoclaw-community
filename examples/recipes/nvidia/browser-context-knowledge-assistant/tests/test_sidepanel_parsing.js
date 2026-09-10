@@ -23,6 +23,9 @@ assert.ok(html.indexOf('id="messages"') < html.indexOf('id="status-card"'));
 assert.match(source, /refreshPageAndCreateConversation/);
 assert.match(source, /await refreshActivePage\(false\)[\s\S]*await createConversation\(\)/);
 assert.match(source, /redirect: "manual"/);
+assert.match(source, /window\\\.\__HERMES_SESSION_TOKEN__/);
+assert.match(source, /X-Hermes-Session-Token/);
+assert.doesNotMatch(source, /storage\.(?:local|sync)\.set\([^)]*(?:SessionToken|sessionToken|token)/s);
 assert.match(source, /response\.type === "opaqueredirect"/);
 assert.match(source, /response\.headers\.get\("content-type"\)\?\.includes\("text\/html"\)/);
 assert.match(source, /NemoClaw did not respond within 20 seconds/);
@@ -34,8 +37,22 @@ assert.match(source, /chrome\.permissions\.request/);
 assert.match(source, /askNemoClawOrigin/);
 assert.match(source, /chrome\.tabs\.create\(\{ url: `\$\{nemoClawOrigin\}\/` \}\)/);
 assert.match(html, /id="settings-button"/);
-assert.match(html, /credentials remain in the normal NemoHermes browser session/);
+assert.match(html, /ephemeral session token/);
 assert.doesNotMatch(source, /storage\.(?:local|sync)\.set\([^)]*(?:page_text|result|messages)/s);
+const tokenParserStart = source.indexOf("function parseLoopbackDashboardToken");
+const tokenParserEnd = source.indexOf("async function loadLoopbackDashboardToken", tokenParserStart);
+assert.ok(tokenParserStart >= 0 && tokenParserEnd > tokenParserStart);
+const tokenContext = {};
+vm.runInNewContext(
+  `${source.slice(tokenParserStart, tokenParserEnd)}\nglobalThis.parseToken = parseLoopbackDashboardToken;`,
+  tokenContext
+);
+assert.equal(
+  tokenContext.parseToken('<script>window.__HERMES_SESSION_TOKEN__="0123456789abcdef";</script>'),
+  "0123456789abcdef"
+);
+assert.equal(tokenContext.parseToken('<script>window.__HERMES_SESSION_TOKEN__="short";</script>'), null);
+assert.equal(tokenContext.parseToken("<html>no token</html>"), null);
 const start = source.indexOf("function parseMarkdownBlocks");
 const end = source.indexOf("function appendInlineMarkdown", start);
 assert.ok(start >= 0 && end > start);
