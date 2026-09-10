@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import sys
 import tempfile
 import threading
@@ -503,6 +504,22 @@ class ConversationApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as missing_context:
             self.send(conversation_id, "Question", "", "g" * 24)
         self.assertEqual(missing_context.exception.status_code, 400)
+
+    def test_root_owned_loopback_marker_enables_local_owner(self):
+        marker_metadata = SimpleNamespace(
+            st_mode=stat.S_IFREG | 0o444,
+            st_uid=0,
+            st_gid=0,
+            st_nlink=1,
+            st_size=2,
+        )
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
+            os, "open", return_value=42
+        ), mock.patch.object(os, "fstat", return_value=marker_metadata), mock.patch.object(
+            os, "read", return_value=b"1\n"
+        ), mock.patch.object(os, "close") as close:
+            self.assertTrue(module._loopback_mode_enabled())
+            close.assert_called_once_with(42)
 
     def test_pinned_extension_origin_is_allowed(self):
         request = _FakeRequest(

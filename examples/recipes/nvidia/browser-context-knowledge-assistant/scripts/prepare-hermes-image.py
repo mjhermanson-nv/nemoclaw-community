@@ -33,6 +33,11 @@ RUN /opt/hermes/.venv/bin/python -c \\
        /sandbox/.hermes/plugins/ask-nemoclaw \\
        /sandbox/.hermes-data/nemo-relay \\
     && chmod -R a+rX /sandbox/.hermes/plugins/ask-nemoclaw \\
+    && mkdir -p /etc/nemoclaw \\
+    && printf '1\\n' > /etc/nemoclaw/ask-nemoclaw-loopback-mode \\
+    && chown root:root /etc/nemoclaw /etc/nemoclaw/ask-nemoclaw-loopback-mode \\
+    && chmod 555 /etc/nemoclaw \\
+    && chmod 444 /etc/nemoclaw/ask-nemoclaw-loopback-mode \\
     && chown -R root:root /etc/nemo-relay \\
     && chmod 555 /etc/nemo-relay /etc/nemo-relay/config \\
     && chmod 444 /etc/nemo-relay/config/plugins.toml
