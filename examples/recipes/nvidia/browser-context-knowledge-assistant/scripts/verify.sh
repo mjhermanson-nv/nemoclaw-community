@@ -11,8 +11,12 @@ node --check "$ROOT/extension/service-worker.js"
 node --check "$ROOT/extension/sidepanel.js"
 bash -n "$ROOT/scripts/check-connection.sh"
 bash -n "$ROOT/scripts/onboard.sh"
-grep -Fq 'CUSTOM_DOCKERFILE="$NEMOCLAW_SOURCE/Dockerfile.ask-nemoclaw"' "$ROOT/scripts/onboard.sh"
-grep -Fq -- '--from "$CUSTOM_DOCKERFILE"' "$ROOT/scripts/onboard.sh"
+grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
+grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
+if grep -Eq '^[[:space:]]*--from' "$ROOT/scripts/onboard.sh"; then
+  printf 'onboarding unexpectedly routes the generated Hermes image through the legacy gateway builder\n' >&2
+  exit 1
+fi
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
   printf 'connection checker accepted a URL path instead of an exact origin\n' >&2
   exit 1

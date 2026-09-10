@@ -158,6 +158,65 @@ third-party software terms. Do not automate that acceptance for another user.
 If you accept the displayed terms, follow the installer's documented acceptance
 prompt or flag.
 
+#### Brev launchable compatibility check
+
+Perform the update before creating a sandbox. Some older revisions of the
+NemoClaw Brev launchable use Docker's containerd snapshotter and an older,
+externally supervised OpenShell gateway. The current CLI cannot complete
+onboarding until both host components are compatible. These changes restart
+Docker and the gateway, so use this procedure only on a fresh instance with no
+sandboxes. First confirm that `openshell sandbox list` reports no sandboxes.
+
+If the installer reports `host.docker.storage_incompatible` and `docker info`
+shows `io.containerd.snapshotter.v1`, select the classic overlay2 driver:
+
+```bash
+printf '%s\n' \
+  '{' \
+  '  "features": {' \
+  '    "containerd-snapshotter": false' \
+  '  }' \
+  '}' \
+  | sudo tee /etc/docker/daemon.json >/dev/null
+sudo systemctl restart docker
+docker info --format 'Driver={{.Driver}} Status={{json .DriverStatus}}'
+```
+
+The result must report `Driver=overlay2` and must not contain
+`io.containerd.snapshotter.v1`.
+
+If the Brev launchable uses the system service
+`openshell-gateway.service`, synchronize that service with the OpenShell
+installation supplied by the updated NemoClaw CLI, then wait for the gateway
+API rather than relying only on systemd's process state:
+
+```bash
+sudo install -o root -g root -m 0755 \
+  "$HOME/.local/bin/openshell" \
+  "$HOME/.local/bin/openshell-gateway" \
+  "$HOME/.local/bin/openshell-sandbox" \
+  /usr/local/bin/
+sudo systemctl restart openshell-gateway.service
+
+export OPENSHELL_LOCAL_TLS_DIR=/var/lib/brev/openshell-gateway/tls
+openshell gateway add \
+  --name nemoclaw \
+  --local \
+  https://127.0.0.1:8080
+openshell gateway select nemoclaw
+
+for attempt in {1..30}; do
+  if openshell sandbox list; then
+    break
+  fi
+  sleep 1
+done
+```
+
+The final command must complete successfully before running this recipe's
+onboarding script. Do not start the separate user-level gateway service when
+the Brev launchable declares the system service as its gateway owner.
+
 Clone this repository on the Brev instance after the installer completes:
 
 ```bash
@@ -175,9 +234,10 @@ configuration into that checkout, and enables both additions through
 NemoClaw's managed Hermes policy. It uses the NeMo Relay version already bundled
 with Hermes so the image preserves Hermes's tested dependency constraints. It
 also preserves the built-in `nemoclaw` plugin and the rest of the standard image.
-The script places the prepared Dockerfile at the NemoClaw repository root so
-the custom build context includes the repository-level `agents/` and `tools/`
-directories required by the maintained Hermes image.
+The script then uses NemoClaw's normal generated-image path. Do not add
+`--from`: current generated Hermes images require local BuildKit, while custom
+Dockerfiles intentionally remain on the OpenShell gateway builder trust
+boundary.
 
 ```bash
 bash scripts/onboard.sh
@@ -192,6 +252,14 @@ characters:
 
 ```bash
 NEMOCLAW_SANDBOX_NAME=my-browser-agent bash scripts/onboard.sh
+```
+
+If onboarding stopped before creating the sandbox and reports that the prior
+session used a custom Dockerfile, discard only that incomplete onboarding
+session and restart through the generated-image path:
+
+```bash
+bash scripts/onboard.sh --fresh
 ```
 
 Confirm readiness:

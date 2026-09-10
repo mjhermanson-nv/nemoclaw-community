@@ -8,6 +8,33 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-ask-nemoclaw}"
 NEMOCLAW_SOURCE="${NEMOCLAW_SOURCE:-}"
 
+for required_command in docker openshell nemohermes python3; do
+  if ! command -v "$required_command" >/dev/null 2>&1; then
+    printf 'Required command is unavailable: %s\n' "$required_command" >&2
+    exit 1
+  fi
+done
+
+DOCKER_DRIVER_STATUS="$(docker info --format '{{json .DriverStatus}}')"
+if [[ "$DOCKER_DRIVER_STATUS" == *'io.containerd.snapshotter.v1'* ]]; then
+  cat >&2 <<'EOF'
+Docker is using the containerd snapshotter, which cannot provide the nested
+overlay mounts required by this OpenShell sandbox. Configure Docker to use the
+classic overlay2 driver, restart Docker, and rerun this script. See the Brev
+host preparation section in README.md for the tested fresh-instance procedure.
+EOF
+  exit 1
+fi
+
+if ! openshell sandbox list >/dev/null; then
+  cat >&2 <<'EOF'
+The selected OpenShell gateway is unavailable. Start or register the gateway
+owned by the deployment, verify that `openshell sandbox list` succeeds, and
+rerun this script. The script will not replace an externally supervised gateway.
+EOF
+  exit 1
+fi
+
 if [[ -z "$NEMOCLAW_SOURCE" ]]; then
   if [[ -d "$HOME/.nemoclaw/source/.git" ]]; then
     NEMOCLAW_SOURCE="$HOME/.nemoclaw/source"
@@ -19,15 +46,12 @@ fi
 
 python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOURCE"
 
-# NemoClaw uses the directory containing --from as the Docker build context.
-# The managed Hermes Dockerfile copies repository-root paths such as tools/ and
-# agents/, so place the prepared Dockerfile at the repository root.
-CUSTOM_DOCKERFILE="$NEMOCLAW_SOURCE/Dockerfile.ask-nemoclaw"
-cp "$NEMOCLAW_SOURCE/agents/hermes/Dockerfile" "$CUSTOM_DOCKERFILE"
-
 printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
-printf 'Custom Dockerfile: %s\n' "$CUSTOM_DOCKERFILE"
+# Do not pass --from here. Current generated Hermes images require BuildKit,
+# while user-supplied Dockerfiles intentionally remain on the OpenShell
+# gateway builder trust boundary. Preparing the installed Hermes source and
+# using the normal generated-image path preserves both requirements.
 nemohermes onboard \
   --name "$SANDBOX_NAME" \
-  --from "$CUSTOM_DOCKERFILE"
+  "$@"
