@@ -89,7 +89,8 @@ The base recipe:
 
 - requires an authenticated Hermes session for shared HTTPS deployments;
 - permits a single local development identity only when the prepared image
-  explicitly enables loopback mode and the request host is loopback;
+  explicitly enables loopback mode through its environment or a root-owned,
+  read-only marker and the request host is loopback;
 - verifies the browser origin;
 - strips URL credentials, fragments, and query parameters for every site;
 - limits request and response sizes;

@@ -21,6 +21,7 @@ import queue
 import re
 import secrets
 import sqlite3
+import stat
 import threading
 import time
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ _EXTENSION_ID_RE = re.compile(r"^[a-p]{32}$")
 _DEFAULT_EXTENSION_ID = "fiefoieocpacddeapdfmnfacaahpcnad"
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _LOOPBACK_OWNER = "ask-nemoclaw-loopback-development"
+_LOOPBACK_MODE_MARKER = Path("/etc/nemoclaw/ask-nemoclaw-loopback-mode")
 
 _MAX_URL_CHARS = 2048
 _MAX_PAGE_TITLE_CHARS = 512
@@ -319,12 +321,41 @@ def _context_hash(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _loopback_mode_enabled() -> bool:
+    if os.environ.get("HERMES_ASK_NEMOCLAW_LOOPBACK_MODE") == "1":
+        return True
+
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(_LOOPBACK_MODE_MARKER, flags)
+    except OSError:
+        return False
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_gid != 0
+            or stat.S_IMODE(metadata.st_mode) & 0o022
+            or metadata.st_nlink != 1
+            or metadata.st_size > 2
+        ):
+            return False
+        return os.read(descriptor, 3) in {b"1", b"1\n"}
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
+
+
 def _owner(request: Request) -> str:
     session = getattr(request.state, "session", None)
     owner = str(getattr(session, "user_id", "") or "").strip()
     if owner:
         return owner
-    if os.environ.get("HERMES_ASK_NEMOCLAW_LOOPBACK_MODE") == "1":
+    if _loopback_mode_enabled():
         hostname = (urlsplit(_external_request_origin(request)).hostname or "").lower()
         if hostname in _LOOPBACK_HOSTS:
             return _LOOPBACK_OWNER
