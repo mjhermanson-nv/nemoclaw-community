@@ -27,10 +27,13 @@
         </div>
         <section id="settings-card" class="card settings-card" hidden aria-label="NemoClaw settings">
           <form id="settings-form">
-            <label for="nemoclaw-origin">NemoHermes dashboard URL</label>
-            <input id="nemoclaw-origin" name="nemoclaw-origin" type="url" required
+            <label for="nemoclaw-service-url">Ask NemoClaw service URL</label>
+            <input id="nemoclaw-service-url" name="nemoclaw-service-url" type="url" required
+                   placeholder="https://hermes.example.com/api/plugins/ask-nemoclaw">
+            <label for="nemoclaw-dashboard-url">Dashboard URL</label>
+            <input id="nemoclaw-dashboard-url" name="nemoclaw-dashboard-url" type="url" required
                    placeholder="https://hermes.example.com">
-            <p class="settings-help">Use HTTPS for a shared deployment. HTTP is accepted only for localhost or 127.0.0.1 development tunnels.</p>
+            <p class="settings-help">The service may use the standard Hermes path or a deployment-specific reverse-proxy path. Both URLs must use the same HTTPS origin. HTTP is accepted only for localhost development.</p>
             <p class="settings-help"><strong>Authentication:</strong> shared deployments use the normal NemoHermes browser session. For a loopback dashboard, the extension reads Hermes's ephemeral session token from the dashboard page and keeps it only in extension memory. It does not store a username, password, API key, token, or cookie.</p>
             <p id="settings-error" class="settings-error" hidden></p>
             <div class="button-row">

@@ -22,9 +22,17 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
   --hermes-origin http://127.0.0.1:18789 \
   --output "$ROOT/build/loopback-verification-extension"
+"$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
+  --hermes-origin https://nemoclaw.example.com \
+  --service-path /ask-nemoclaw \
+  --dashboard-path /dashboard \
+  --output "$ROOT/build/brev-verification-extension"
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
 test -s "$ROOT/build/loopback-verification-extension/manifest.json"
+grep -Fq 'servicePath: "/ask-nemoclaw"' "$ROOT/build/brev-verification-extension/config.js"
+grep -Fq 'dashboardPath: "/dashboard"' "$ROOT/build/brev-verification-extension/config.js"
+grep -Fq 'location ^~ /ask-nemoclaw/' "$ROOT/deploy/nginx/ask-nemoclaw-location.conf"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
