@@ -31,8 +31,18 @@ def validated_origin(value: str) -> str:
     return value.rstrip("/")
 
 
+def validated_path(value: str) -> str:
+    if not value.startswith("/") or value.startswith("//"):
+        raise argparse.ArgumentTypeError("URL path must begin with one slash")
+    if "?" in value or "#" in value:
+        raise argparse.ArgumentTypeError("URL path cannot contain a query or fragment")
+    return value.rstrip("/") or "/"
+
+
 parser = argparse.ArgumentParser(description="Build an unpacked Ask NemoClaw extension")
 parser.add_argument("--hermes-origin", required=True, type=validated_origin)
+parser.add_argument("--service-path", type=validated_path, default="/api/plugins/ask-nemoclaw")
+parser.add_argument("--dashboard-path", type=validated_path, default="/")
 parser.add_argument("--output", type=Path, default=ROOT / "build" / "extension")
 args = parser.parse_args()
 
@@ -50,6 +60,8 @@ manifest = json.loads(manifest_text)
 
 config_text = (SOURCE / "config.template.js").read_text(encoding="utf-8")
 config_text = config_text.replace("__HERMES_ORIGIN_JSON__", json.dumps(args.hermes_origin))
+config_text = config_text.replace("__SERVICE_PATH_JSON__", json.dumps(args.service_path))
+config_text = config_text.replace("__DASHBOARD_PATH_JSON__", json.dumps(args.dashboard_path))
 (args.output / "config.js").write_text(config_text, encoding="utf-8")
 
 print(f"Built unpacked extension: {args.output}")
