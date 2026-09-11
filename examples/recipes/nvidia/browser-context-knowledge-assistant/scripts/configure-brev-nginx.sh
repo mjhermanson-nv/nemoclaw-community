@@ -109,4 +109,5 @@ fi
 
 sudo systemctl reload nginx
 printf 'Configured Brev Nginx for Ask NemoClaw on dashboard port %s.\n' "$DASHBOARD_PORT"
+printf 'Set the Brev HTTP Secure Link destination port to 80, not %s.\n' "$DASHBOARD_PORT"
 printf 'Site backup: %s\n' "$site_backup"
