@@ -229,8 +229,9 @@ cd nemoclaw-community/examples/recipes/nvidia/browser-context-knowledge-assistan
 Start from a normal NemoClaw installation configured to use Hermes. The
 supported NemoClaw path for Hermes runtime additions is a custom sandbox image.
 The setup script finds the source checkout used by the installed `nemohermes`
-installation, copies the `ask-nemoclaw` Hermes plugin and local Relay
-configuration into that checkout, and enables both additions through
+installation, copies the `ask-nemoclaw` Hermes plugin into Hermes's shared,
+root-owned plugin directory, adds the local Relay configuration to that
+checkout, and enables both additions through
 NemoClaw's managed Hermes policy. The preparation also adds the top-level
 `plugins` configuration to the reviewed dashboard-mirroring keys so Hermes's
 isolated dashboard process authorizes the same plugin API as the main agent

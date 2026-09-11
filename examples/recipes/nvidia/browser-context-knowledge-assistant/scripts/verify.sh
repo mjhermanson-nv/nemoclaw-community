@@ -80,7 +80,8 @@ test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1
-grep -Fq 'COPY local-plugins/ask-nemoclaw/' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+grep -Fq 'COPY local-plugins/ask-nemoclaw/ /opt/hermes/plugins/ask-nemoclaw/' \
+  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'ADD --checksum=sha256:0ce7103aec546766649c182619d16aa6ad07439e4d0ebd16d95c5004afb3e56a' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' \
