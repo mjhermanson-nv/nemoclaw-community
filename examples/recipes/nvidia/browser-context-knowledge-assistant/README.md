@@ -204,15 +204,14 @@ The result must report `Driver=overlay2`.
 
 The launchable installation is a source checkout, so `nemoclaw update --yes`
 reports the available release but intentionally does not replace it. Run the
-maintained installer from `/tmp` and explicitly select the Brev-owned gateway
-declaration:
+maintained installer from `/tmp` without selecting or onboarding against the
+launchable's older OpenShell gateway:
 
 ```bash
 cd /tmp
 curl -fsSL https://www.nvidia.com/nemoclaw.sh \
   | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY \
       NEMOCLAW_AGENT=hermes \
-      NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json \
       bash
 ```
 
@@ -232,36 +231,33 @@ nemoclaw --version
 openshell --version
 ```
 
-#### Brev launchable compatibility check
+#### Hand the empty gateway to the updated installation
 
-If the launchable uses the system service `openshell-gateway.service`, it owns
-the host gateway. Do not replace its binaries or start the separate user-level
-gateway. After cloning this recipe, register that declared local gateway with
-the updated OpenShell client and then run the read-only compatibility check:
+The tested launchable runs an older, externally supervised OpenShell gateway.
+It can answer health requests, but it does not implement the complete inference
+configuration contract required by the updated NemoClaw client. The resulting
+onboarding failure is `Operation is not implemented or not supported`, even
+after model validation succeeds.
 
-```bash
-bash scripts/register-brev-gateway.sh
-bash scripts/check-brev-host.sh
-```
-
-The registration helper reads the local TLS path declared by the launchable and
-changes only the user's OpenShell gateway selection. It does not replace or
-restart the gateway. The check then verifies the Docker driver, authenticated
-gateway access, and an empty sandbox inventory. A successful mTLS API probe is
-authoritative even when the externally supervised gateway binary is older than
-the user-local CLI. Copying newer OpenShell binaries into
-`/usr/local/bin` is not a safe workaround: the launchable operating system can
-provide an older glibc than those binaries require.
-
-Clone this repository after the update completes, then run the compatibility
-check described above:
+Clone this repository, then run the guarded handoff and compatibility check:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/nvidia/browser-context-knowledge-assistant
-bash scripts/register-brev-gateway.sh
+bash scripts/prepare-brev-gateway.sh
 bash scripts/check-brev-host.sh
 ```
+
+The handoff first proves that the old gateway contains no sandboxes. It then
+stops and disables only `openshell-gateway.service`, removes the stale local
+registration, and leaves the launchable's gateway data intact. The onboarding
+script selects an explicit `nemoclaw-managed` declaration and opts into
+NemoClaw's authenticated gateway compatibility container. This mode is needed
+because the tested launchable uses Ubuntu 22.04/glibc 2.35 while the current
+native OpenShell gateway requires a newer host ABI.
+
+Do not copy newer OpenShell binaries into `/usr/local/bin`. Replacing individual
+binaries can leave the gateway and sandbox driver incompatible with each other.
 
 ### 3. Build the custom Hermes sandbox
 
@@ -528,7 +524,7 @@ For a live verification:
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay configuration, and managed enablement to the complete Hermes image source. |
 | `scripts/check-brev-host.sh` | Performs read-only launchable compatibility checks before onboarding. |
-| `scripts/register-brev-gateway.sh` | Safely selects the compatible Brev-owned local gateway without replacing it. |
+| `scripts/prepare-brev-gateway.sh` | Proves the legacy Brev gateway is empty and hands lifecycle control to the current NemoClaw installation. |
 | `scripts/onboard.sh` | Builds and onboards the custom Hermes sandbox. |
 | `scripts/build-extension.sh` | Produces an unpacked extension for one exact Hermes origin. |
 | `deploy/nginx/ask-nemoclaw-server.conf` | Dedicated proxy for a single-user authenticated Ask NemoClaw Brev Secure Link. |

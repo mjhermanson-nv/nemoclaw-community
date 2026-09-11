@@ -11,12 +11,13 @@ node --check "$ROOT/extension/service-worker.js"
 node --check "$ROOT/extension/sidepanel.js"
 bash -n "$ROOT/scripts/check-connection.sh"
 bash -n "$ROOT/scripts/check-brev-host.sh"
-bash -n "$ROOT/scripts/register-brev-gateway.sh"
+bash -n "$ROOT/scripts/prepare-brev-gateway.sh"
 bash -n "$ROOT/scripts/onboard.sh"
 bash -n "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
 grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
-grep -Fq 'NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json' "$ROOT/scripts/onboard.sh"
+grep -Fq 'nemoclaw-managed-gateway.json' "$ROOT/scripts/onboard.sh"
+grep -Fq 'NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH' "$ROOT/scripts/onboard.sh"
 if grep -Eq '^[[:space:]]*--from' "$ROOT/scripts/onboard.sh"; then
   printf 'onboarding unexpectedly routes the generated Hermes image through the legacy gateway builder\n' >&2
   exit 1
@@ -48,14 +49,14 @@ grep -Fq 'proxy_set_header Host 127.0.0.1:__DASHBOARD_PORT__' "$ROOT/deploy/ngin
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
-grep -Fq 'NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json' "$ROOT/README.md"
-grep -Fq 'Do not replace its binaries' "$ROOT/README.md"
+grep -Fq 'Operation is not implemented or not supported' "$ROOT/README.md"
+grep -Fq 'Do not copy newer OpenShell binaries' "$ROOT/README.md"
 grep -Fq "Do not run the launchable's NemoClaw onboarding flow" "$ROOT/README.md"
 if grep -Eiq '\$[0-9]+([.][0-9]+)?(/hour|/hr)|compute price|storage pricing' "$ROOT/README.md"; then
   printf 'README must not include Brev pricing language\n' >&2
   exit 1
 fi
-grep -Fq 'successful mTLS gateway probe above is authoritative' "$ROOT/scripts/check-brev-host.sh"
+grep -Fq '"mode": "nemoclaw-managed"' "$ROOT/deploy/brev/nemoclaw-managed-gateway.json"
 if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
   printf 'README must not recommend replacing Brev-owned OpenShell binaries\n' >&2
   exit 1

@@ -5,6 +5,12 @@
 set -Eeuo pipefail
 
 failures=0
+brev_handoff_ready=0
+
+if [[ -e /etc/nemoclaw/gateway-management.json \
+      && "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" != active ]]; then
+  brev_handoff_ready=1
+fi
 
 report_failure() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -53,12 +59,20 @@ if sandbox_output="$(openshell sandbox list 2>&1)"; then
     report_ok "The selected OpenShell gateway is reachable and contains no sandboxes"
   fi
 else
-  report_failure "The selected OpenShell gateway is unavailable: $sandbox_output"
+  if ((brev_handoff_ready == 1)); then
+    report_ok "The legacy Brev gateway is stopped; the current gateway will start during onboarding"
+  else
+    report_failure "The selected OpenShell gateway is unavailable: $sandbox_output"
+  fi
 fi
 
 if systemctl list-unit-files openshell-gateway.service >/dev/null 2>&1; then
   if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" != active ]]; then
-    report_failure "The Brev-owned openshell-gateway.service is not active"
+    if ((brev_handoff_ready == 1)); then
+      report_ok "The legacy Brev openshell-gateway.service is inactive after the explicit handoff"
+    else
+      report_failure "The Brev-owned openshell-gateway.service is not active"
+    fi
   else
     report_ok "The Brev-owned openshell-gateway.service is active"
   fi
@@ -86,7 +100,7 @@ if ((failures > 0)); then
 
 Host compatibility checks failed. Do not copy replacement OpenShell binaries
 over /usr/local/bin: a binary built for a newer glibc can make the Brev-owned
-gateway unusable. Follow the maintained installer and externally supervised
+gateway unusable. Follow the maintained installer and managed compatibility
 gateway procedure in this recipe.
 EOF
   exit 1

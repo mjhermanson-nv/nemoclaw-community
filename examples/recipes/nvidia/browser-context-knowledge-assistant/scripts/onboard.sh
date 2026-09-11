@@ -16,12 +16,26 @@ OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
 [[ -x "$NEMOHERMES_BIN" ]] || NEMOHERMES_BIN="$(command -v nemohermes || true)"
 [[ -x "$OPENSHELL_BIN" ]] || OPENSHELL_BIN="$(command -v openshell || true)"
 
-# A NemoClaw Brev launchable declares its externally supervised gateway here.
-# Select that declaration for the child onboarding process without changing the
-# host service or requiring the operator to repeat an environment export.
+# Current NemoClaw requires a current OpenShell gateway for provider and
+# inference-route configuration. On the tested Ubuntu 22.04 Brev launchable,
+# the image-owned gateway is older and the native current binary exceeds the
+# host glibc level. After prepare-brev-gateway.sh performs the explicit
+# lifecycle handoff, select NemoClaw-managed mode and its documented,
+# authenticated compatibility container.
+GATEWAY_WILL_START=0
 if [[ -z "${NEMOCLAW_GATEWAY_MANAGEMENT:-}" \
-      && -r /etc/nemoclaw/gateway-management.json ]]; then
-  export NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json
+      && -e /etc/nemoclaw/gateway-management.json ]]; then
+  if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == active ]]; then
+    cat >&2 <<'EOF'
+The legacy Brev OpenShell gateway is still active. Run
+`bash scripts/prepare-brev-gateway.sh` before onboarding so the current
+NemoClaw installation can own a version-matched gateway.
+EOF
+    exit 1
+  fi
+  export NEMOCLAW_GATEWAY_MANAGEMENT="$ROOT/deploy/brev/nemoclaw-managed-gateway.json"
+  export NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH="${NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH:-1}"
+  GATEWAY_WILL_START=1
 fi
 
 for required_command in docker python3; do
@@ -48,11 +62,11 @@ EOF
   exit 1
 fi
 
-if ! "$OPENSHELL_BIN" sandbox list >/dev/null; then
+if ((GATEWAY_WILL_START == 0)) && ! "$OPENSHELL_BIN" sandbox list >/dev/null; then
   cat >&2 <<'EOF'
 The selected OpenShell gateway is unavailable. Start or register the gateway
 owned by the deployment, verify that `openshell sandbox list` succeeds, and
-rerun this script. The script will not replace an externally supervised gateway.
+rerun this script.
 EOF
   exit 1
 fi
