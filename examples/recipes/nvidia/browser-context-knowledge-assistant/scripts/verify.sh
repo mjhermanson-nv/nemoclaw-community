@@ -50,6 +50,11 @@ grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json' "$ROOT/README.md"
 grep -Fq 'Do not replace its binaries' "$ROOT/README.md"
+grep -Fq "Do not run the launchable's NemoClaw onboarding flow" "$ROOT/README.md"
+if grep -Eiq '\$[0-9]+([.][0-9]+)?(/hour|/hr)|compute price|storage pricing' "$ROOT/README.md"; then
+  printf 'README must not include Brev pricing language\n' >&2
+  exit 1
+fi
 grep -Fq 'successful mTLS gateway probe above is authoritative' "$ROOT/scripts/check-brev-host.sh"
 if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
   printf 'README must not recommend replacing Brev-owned OpenShell binaries\n' >&2

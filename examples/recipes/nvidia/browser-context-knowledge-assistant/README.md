@@ -164,9 +164,12 @@ reproducible deployment.
 Open the [NemoClaw Brev launchable](https://brev.nvidia.com/launchable/deploy/now?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS)
 and create one instance. At the time this recipe was prepared, the launchable
 selected a CPU-only `n2d-standard-4` instance with 4 vCPUs, 16 GiB RAM, and
-256 GB storage. Brev showed a compute price of `$0.133838/hour` and separate
-storage pricing. Prices and available instance types can change; review the
-current Brev confirmation page before creating the instance.
+256 GB storage.
+
+Do not run the launchable's NemoClaw onboarding flow or create a sandbox yet.
+The following sections update the host, prepare the custom Hermes image with
+the Ask NemoClaw plugin, and then run the recipe's onboarding procedure in
+place of the launchable's standard onboarding steps.
 
 Stop or delete the instance when you finish. A stopped instance can continue
 to incur storage charges.
