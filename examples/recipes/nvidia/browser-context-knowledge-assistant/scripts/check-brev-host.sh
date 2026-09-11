@@ -71,8 +71,10 @@ if systemctl list-unit-files openshell-gateway.service >/dev/null 2>&1; then
     user_gateway_version="$(command_version "$(dirname "$(command -v openshell)")/openshell-gateway" || true)"
     printf '  system gateway:  %s\n' "${system_gateway_version:-unavailable}"
     printf '  updated gateway: %s\n' "${user_gateway_version:-unavailable}"
-    if [[ -z "$system_gateway_version" || -z "$user_gateway_version" || "$system_gateway_version" != "$user_gateway_version" ]]; then
-      report_failure "The Brev-owned gateway and updated NemoClaw installation use different OpenShell versions"
+    if [[ -z "$system_gateway_version" || -z "$user_gateway_version" ]]; then
+      report_failure "An OpenShell gateway version could not be inspected"
+    elif [[ "$system_gateway_version" != "$user_gateway_version" ]]; then
+      printf 'INFO: The Brev-owned and user-local gateway binaries differ; the successful mTLS gateway probe above is authoritative.\n'
     fi
   else
     report_failure "/usr/local/bin/openshell-gateway is unavailable"
@@ -84,8 +86,8 @@ if ((failures > 0)); then
 
 Host compatibility checks failed. Do not copy replacement OpenShell binaries
 over /usr/local/bin: a binary built for a newer glibc can make the Brev-owned
-gateway unusable. Use a refreshed NemoClaw launchable whose host gateway and
-CLI are compatible, or follow an NVIDIA-supported launchable upgrade procedure.
+gateway unusable. Follow the maintained installer and externally supervised
+gateway procedure in this recipe.
 EOF
   exit 1
 fi

@@ -47,10 +47,9 @@ grep -Fq 'proxy_set_header Host 127.0.0.1:__DASHBOARD_PORT__' "$ROOT/deploy/ngin
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
-grep -Fq 'nemoclaw update --check' "$ROOT/README.md"
+grep -Fq 'NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json' "$ROOT/README.md"
 grep -Fq 'Do not replace its binaries' "$ROOT/README.md"
-grep -Fq 'different OpenShell versions' "$ROOT/scripts/check-brev-host.sh"
-grep -Fq 'Refusing to register mismatched OpenShell versions' "$ROOT/scripts/register-brev-gateway.sh"
+grep -Fq 'successful mTLS gateway probe above is authoritative' "$ROOT/scripts/check-brev-host.sh"
 if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
   printf 'README must not recommend replacing Brev-owned OpenShell binaries\n' >&2
   exit 1

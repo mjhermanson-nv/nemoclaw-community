@@ -171,19 +171,52 @@ current Brev confirmation page before creating the instance.
 Stop or delete the instance when you finish. A stopped instance can continue
 to incur storage charges.
 
-### 2. Install or update NemoClaw for Hermes
+### 2. Prepare the fresh Brev host
 
-Connect to the Brev instance. Before onboarding or entering an inference
-credential, use NemoClaw's supported update command:
+Connect to the Brev instance. Do not use the launchable's web onboarding page
+yet. Confirm that the host contains no sandbox:
 
 ```bash
-nemoclaw update --check
-nemoclaw update --yes
+openshell sandbox list
 ```
 
-`nemoclaw update` runs the maintained HTTPS installer flow. Review and
-explicitly accept any third-party software terms it presents. Do not automate
-that acceptance for another user.
+Some launchable revisions use Docker's containerd snapshotter, which cannot
+provide the nested overlay mounts required by the OpenShell sandbox. If
+`docker info --format '{{json .DriverStatus}}'` contains
+`io.containerd.snapshotter.v1`, switch this fresh host to classic overlay2:
+
+```bash
+printf '%s\n' \
+  '{' \
+  '  "features": {' \
+  '    "containerd-snapshotter": false' \
+  '  }' \
+  '}' \
+  | sudo tee /etc/docker/daemon.json >/dev/null
+sudo systemctl restart docker
+docker info --format 'Driver={{.Driver}} Status={{json .DriverStatus}}'
+```
+
+The result must report `Driver=overlay2`.
+
+The launchable installation is a source checkout, so `nemoclaw update --yes`
+reports the available release but intentionally does not replace it. Run the
+maintained installer from `/tmp` and explicitly select the Brev-owned gateway
+declaration:
+
+```bash
+cd /tmp
+curl -fsSL https://www.nvidia.com/nemoclaw.sh \
+  | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY \
+      NEMOCLAW_AGENT=hermes \
+      NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json \
+      bash
+```
+
+Review and explicitly accept the third-party software terms. Do not automate
+that acceptance for another user. When the updated installer reaches inference
+provider selection, cancel it before entering a credential. The example must
+prepare the Hermes image before onboarding creates the only sandbox.
 
 Refresh the shell command path after the installer. The maintained installation
 is user-local and must take precedence over older launchable binaries:
@@ -198,31 +231,6 @@ openshell --version
 
 #### Brev launchable compatibility check
 
-Perform the update before creating a sandbox. Some older revisions of the
-NemoClaw Brev launchable use Docker's containerd snapshotter and an older,
-externally supervised OpenShell gateway. The current CLI cannot complete
-onboarding until both host components are compatible. These changes restart
-Docker and the gateway, so use this procedure only on a fresh instance with no
-sandboxes. First confirm that `openshell sandbox list` reports no sandboxes.
-
-If the installer reports `host.docker.storage_incompatible` and `docker info`
-shows `io.containerd.snapshotter.v1`, select the classic overlay2 driver:
-
-```bash
-printf '%s\n' \
-  '{' \
-  '  "features": {' \
-  '    "containerd-snapshotter": false' \
-  '  }' \
-  '}' \
-  | sudo tee /etc/docker/daemon.json >/dev/null
-sudo systemctl restart docker
-docker info --format 'Driver={{.Driver}} Status={{json .DriverStatus}}'
-```
-
-The result must report `Driver=overlay2` and must not contain
-`io.containerd.snapshotter.v1`.
-
 If the launchable uses the system service `openshell-gateway.service`, it owns
 the host gateway. Do not replace its binaries or start the separate user-level
 gateway. After cloning this recipe, register that declared local gateway with
@@ -233,16 +241,14 @@ bash scripts/register-brev-gateway.sh
 bash scripts/check-brev-host.sh
 ```
 
-The registration helper refuses to continue unless the Brev-owned gateway and
-updated user-local installation report the same OpenShell version. It reads the
-local TLS path declared by the launchable and changes only the user's OpenShell
-gateway selection. It does not replace or restart the gateway. The check then
-verifies the Docker driver, gateway access, and an empty sandbox inventory.
-Both scripts intentionally stop when an older launchable retains an
-incompatible gateway. Copying newer OpenShell binaries into
+The registration helper reads the local TLS path declared by the launchable and
+changes only the user's OpenShell gateway selection. It does not replace or
+restart the gateway. The check then verifies the Docker driver, authenticated
+gateway access, and an empty sandbox inventory. A successful mTLS API probe is
+authoritative even when the externally supervised gateway binary is older than
+the user-local CLI. Copying newer OpenShell binaries into
 `/usr/local/bin` is not a safe workaround: the launchable operating system can
-provide an older glibc than those binaries require. Use a refreshed launchable
-or an NVIDIA-supported launchable upgrade procedure when this check fails.
+provide an older glibc than those binaries require.
 
 Clone this repository after the update completes, then run the compatibility
 check described above:
@@ -281,7 +287,7 @@ Dockerfiles intentionally remain on the OpenShell gateway builder trust
 boundary.
 
 ```bash
-bash scripts/onboard.sh
+bash scripts/onboard.sh --resume
 ```
 
 Onboarding asks you to select an inference provider and enter its credential.
