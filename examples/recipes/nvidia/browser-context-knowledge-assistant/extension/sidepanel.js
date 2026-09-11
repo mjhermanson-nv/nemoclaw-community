@@ -98,6 +98,7 @@ function applyNemoClawUrl(dashboardUrl, preferredServiceUrl = null) {
 async function loadNemoClawOrigin() {
   const stored = await chrome.storage.local.get([
     "askNemoClawUrl",
+    "askNemoClawConfiguredByUser",
     "askNemoClawServiceUrl",
     "askNemoClawDashboardUrl",
     "askNemoClawOrigin"
@@ -109,13 +110,23 @@ async function loadNemoClawOrigin() {
   const legacyService = normalizedDeploymentUrl(stored.askNemoClawServiceUrl || "");
   const candidateOrigin = candidateDashboard ? new URL(candidateDashboard).origin : "";
   if (
-    candidateDashboard
+    stored.askNemoClawConfiguredByUser === true
+    && candidateDashboard
     && (!legacyService || new URL(legacyService).origin === candidateOrigin)
     && await chrome.permissions.contains({ origins: [originPermission(candidateOrigin)] })
   ) {
     applyNemoClawUrl(candidateDashboard, legacyService);
     elements.nemoClawUrl.value = nemoClawDashboardUrl;
     return true;
+  }
+  if (candidateDashboard && stored.askNemoClawConfiguredByUser !== true) {
+    await chrome.storage.local.remove([
+      "askNemoClawUrl",
+      "askNemoClawOrigin",
+      "askNemoClawServiceUrl",
+      "askNemoClawDashboardUrl",
+      "askNemoClawConversationId"
+    ]);
   }
   if (
     DEFAULT_NEMOCLAW_DASHBOARD_URL
@@ -161,7 +172,8 @@ async function saveSettings(event) {
   dashboardSessionToken = null;
   dashboardSessionTokenOrigin = null;
   await chrome.storage.local.set({
-    askNemoClawUrl: candidateDashboard
+    askNemoClawUrl: candidateDashboard,
+    askNemoClawConfiguredByUser: true
   });
   await chrome.storage.local.remove([
     "askNemoClawOrigin",
