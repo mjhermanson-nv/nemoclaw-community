@@ -30,8 +30,8 @@ if [[ -z "${OPENSHELL_LOCAL_TLS_DIR:-}" || ! -r "$OPENSHELL_LOCAL_TLS_DIR/ca.crt
   exit 1
 fi
 
-if openshell gateway list 2>/dev/null | awk -v name="$GATEWAY_NAME" '$1 == "-" && $2 == name { found=1 } $1 == name { found=1 } END { exit !found }'; then
-  openshell gateway select "$GATEWAY_NAME"
+if openshell gateway select "$GATEWAY_NAME" >/dev/null 2>&1; then
+  printf 'Selected existing OpenShell gateway: %s\n' "$GATEWAY_NAME"
 else
   openshell gateway add --name "$GATEWAY_NAME" --local "$GATEWAY_ENDPOINT"
 fi
