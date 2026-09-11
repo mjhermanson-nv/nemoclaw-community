@@ -32,6 +32,7 @@ const MAX_VIEWPORT_IMAGE_BYTES = 4000000;
 const MAX_VIEWPORT_IMAGE_PIXELS = 4000000;
 const MAX_VIEWPORT_IMAGE_EDGE = 2048;
 const HERMES_REQUEST_TIMEOUT_MS = 20000;
+const sessionAuth = globalThis.AskNemoClawAuth;
 
 const elements = {
   pageLabel: document.getElementById("page-label"),
@@ -43,6 +44,7 @@ const elements = {
   settingsForm: document.getElementById("settings-form"),
   nemoClawUrl: document.getElementById("nemoclaw-url"),
   settingsError: document.getElementById("settings-error"),
+  disconnectButton: document.getElementById("disconnect-button"),
   cancelSettingsButton: document.getElementById("cancel-settings-button"),
   conversationSelect: document.getElementById("conversation-select"),
   newConversationButton: document.getElementById("new-conversation-button"),
@@ -169,6 +171,7 @@ async function saveSettings(event) {
     return;
   }
   applyNemoClawUrl(candidateDashboard);
+  await sessionAuth.clearSession();
   dashboardSessionToken = null;
   dashboardSessionTokenOrigin = null;
   await chrome.storage.local.set({
@@ -187,6 +190,37 @@ async function saveSettings(event) {
   activeConversationId = null;
   elements.settingsCard.hidden = true;
   await initialize();
+}
+
+async function disconnectNemoClaw() {
+  const previousOrigin = nemoClawOrigin;
+  clearTimeout(pollTimer);
+  activeJob = null;
+  activeConversationId = null;
+  pendingSubmission = null;
+  dashboardSessionToken = null;
+  dashboardSessionTokenOrigin = null;
+  await sessionAuth.clearSession();
+  await chrome.storage.local.remove([
+    "askNemoClawUrl",
+    "askNemoClawConfiguredByUser",
+    "askNemoClawOrigin",
+    "askNemoClawServiceUrl",
+    "askNemoClawDashboardUrl",
+    "askNemoClawConversationId"
+  ]);
+  if (previousOrigin) {
+    await chrome.permissions.remove({ origins: [originPermission(previousOrigin)] });
+  }
+  nemoClawOrigin = "";
+  nemoClawServiceUrl = "";
+  nemoClawDashboardUrl = "";
+  nemoClawServiceUrls = [];
+  elements.nemoClawUrl.value = "";
+  hideStatus();
+  clearError();
+  setConnectionState("unavailable", "NemoClaw is not configured");
+  showSettings();
 }
 
 function setConnectionState(state, label) {
@@ -645,9 +679,14 @@ async function authenticatedFetch(url, options = {}) {
   const timeout = setTimeout(() => controller.abort(), HERMES_REQUEST_TIMEOUT_MS);
   try {
     const headers = new Headers(options.headers || {});
-    const dashboardToken = await loadDashboardSessionToken(controller.signal);
-    if (dashboardToken) headers.set("X-Hermes-Session-Token", dashboardToken);
-    const response = await fetch(url, {
+    let bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin);
+    if (bearerSession?.accessToken) {
+      headers.set("Authorization", `Bearer ${bearerSession.accessToken}`);
+    } else {
+      const dashboardToken = await loadDashboardSessionToken(controller.signal);
+      if (dashboardToken) headers.set("X-Hermes-Session-Token", dashboardToken);
+    }
+    let response = await fetch(url, {
       ...options,
       headers,
       credentials: "include",
@@ -655,6 +694,20 @@ async function authenticatedFetch(url, options = {}) {
       redirect: "manual",
       signal: controller.signal
     });
+    if (response.status === 401 && bearerSession?.refreshToken) {
+      bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin, { forceRefresh: true });
+      if (bearerSession?.accessToken) {
+        headers.set("Authorization", `Bearer ${bearerSession.accessToken}`);
+        response = await fetch(url, {
+          ...options,
+          headers,
+          credentials: "omit",
+          cache: "no-store",
+          redirect: "manual",
+          signal: controller.signal
+        });
+      }
+    }
     if (
       response.status === 401
       || response.status === 302
@@ -1040,6 +1093,10 @@ elements.settingsForm.addEventListener("submit", event => saveSettings(event).ca
   elements.settingsError.hidden = false;
 }));
 elements.cancelSettingsButton.addEventListener("click", () => { elements.settingsCard.hidden = true; });
+elements.disconnectButton.addEventListener("click", () => disconnectNemoClaw().catch(error => {
+  elements.settingsError.textContent = error.message || "The NemoClaw connection could not be removed.";
+  elements.settingsError.hidden = false;
+}));
 elements.conversationSelect.addEventListener("change", async () => {
   clearTimeout(pollTimer);
   activeJob = null;

@@ -49,7 +49,7 @@ parser.add_argument("--output", type=Path, default=ROOT / "build" / "extension")
 args = parser.parse_args()
 
 args.output.mkdir(parents=True, exist_ok=True)
-for name in ("service-worker.js", "sidepanel.html", "sidepanel.css", "sidepanel.js"):
+for name in ("auth-session.js", "service-worker.js", "sidepanel.html", "sidepanel.css", "sidepanel.js"):
     shutil.copy2(SOURCE / name, args.output / name)
 
 manifest_text = (SOURCE / "manifest.template.json").read_text(encoding="utf-8")

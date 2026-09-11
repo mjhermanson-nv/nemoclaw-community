@@ -8,6 +8,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 node --check "$ROOT/extension/service-worker.js"
+node --check "$ROOT/extension/auth-session.js"
 node --check "$ROOT/extension/sidepanel.js"
 bash -n "$ROOT/scripts/check-connection.sh"
 bash -n "$ROOT/scripts/check-brev-host.sh"
@@ -30,6 +31,7 @@ if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/n
   exit 1
 fi
 node "$ROOT/tests/test_sidepanel_parsing.js"
+node "$ROOT/tests/test_auth_session.js"
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
@@ -49,7 +51,10 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
 test -s "$ROOT/build/portable-verification-extension/manifest.json"
+test -s "$ROOT/build/portable-verification-extension/auth-session.js"
 "$PYTHON_BIN" -c 'import json,sys; assert json.load(open(sys.argv[1]))["host_permissions"] == []' \
+  "$ROOT/build/portable-verification-extension/manifest.json"
+"$PYTHON_BIN" -c 'import json,sys; assert "cookies" in json.load(open(sys.argv[1]))["permissions"]' \
   "$ROOT/build/portable-verification-extension/manifest.json"
 grep -Fq 'hermesOrigin: ""' "$ROOT/build/portable-verification-extension/config.js"
 test -s "$ROOT/build/loopback-verification-extension/manifest.json"
