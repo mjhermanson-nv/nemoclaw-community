@@ -16,6 +16,7 @@ bash -n "$ROOT/scripts/onboard.sh"
 bash -n "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
 grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
+grep -Fq 'NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json' "$ROOT/scripts/onboard.sh"
 if grep -Eq '^[[:space:]]*--from' "$ROOT/scripts/onboard.sh"; then
   printf 'onboarding unexpectedly routes the generated Hermes image through the legacy gateway builder\n' >&2
   exit 1

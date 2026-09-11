@@ -16,6 +16,14 @@ OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
 [[ -x "$NEMOHERMES_BIN" ]] || NEMOHERMES_BIN="$(command -v nemohermes || true)"
 [[ -x "$OPENSHELL_BIN" ]] || OPENSHELL_BIN="$(command -v openshell || true)"
 
+# A NemoClaw Brev launchable declares its externally supervised gateway here.
+# Select that declaration for the child onboarding process without changing the
+# host service or requiring the operator to repeat an environment export.
+if [[ -z "${NEMOCLAW_GATEWAY_MANAGEMENT:-}" \
+      && -r /etc/nemoclaw/gateway-management.json ]]; then
+  export NEMOCLAW_GATEWAY_MANAGEMENT=/etc/nemoclaw/gateway-management.json
+fi
+
 for required_command in docker python3; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf 'Required command is unavailable: %s\n' "$required_command" >&2
