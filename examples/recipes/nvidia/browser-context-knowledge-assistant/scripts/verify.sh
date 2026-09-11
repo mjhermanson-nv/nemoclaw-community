@@ -59,6 +59,10 @@ mkdir -p "$IMAGE_FIXTURE/.git" "$IMAGE_FIXTURE/agents/hermes/config"
 printf '%s\n' '# managed Hermes image' '# Verify the immutable security package inventory in the completed image.' \
   > "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 printf '%s\n' \
+  'const DASHBOARD_ROUTING_KEYS = [' \
+  '  "_nemoclaw_upstream",' \
+  '] as const;' \
+  '' \
   'const MANAGED_POLICY_PATHS = [' \
   '  "updates.refresh_cua_driver",' \
   '] as const;' \
@@ -92,8 +96,13 @@ grep -Fq '/etc/nemoclaw/ask-nemoclaw-loopback-mode' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"]' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
-grep -Fq '"plugins.enabled",' \
+grep -Fq '"plugins",' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
+if grep -Fq '"plugins.enabled",' \
+  "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"; then
+  printf 'plugin enablement must not extend Hermes profile managed paths\n' >&2
+  exit 1
+fi
 grep -Fq 'output_directory = "/sandbox/.hermes-data/nemo-relay/atif"' \
   "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 if grep -Eq 'opentelemetry|https?://' \

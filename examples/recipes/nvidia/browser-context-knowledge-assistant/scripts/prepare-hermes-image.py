@@ -19,10 +19,10 @@ MANAGED_POLICY_BEFORE = '      enabled: ["nemoclaw"],'
 MANAGED_POLICY_AFTER = (
     '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"],'
 )
-MANAGED_PATHS_BEFORE = '  "updates.refresh_cua_driver",\n] as const;'
-MANAGED_PATHS_AFTER = (
-    '  "updates.refresh_cua_driver",\n'
-    '  "plugins.enabled",\n'
+ROUTING_KEYS_BEFORE = '  "_nemoclaw_upstream",\n] as const;'
+ROUTING_KEYS_AFTER = (
+    '  "_nemoclaw_upstream",\n'
+    '  "plugins",\n'
     '] as const;'
 )
 RELAY_VERSION = "0.7.2"
@@ -80,7 +80,7 @@ def update_managed_policy(text: str) -> str:
             "The managed Hermes plugin policy has changed; review the current "
             "NemoClaw plugin configuration before applying this example"
         )
-    if MANAGED_PATHS_AFTER not in text and MANAGED_PATHS_BEFORE not in text:
+    if ROUTING_KEYS_AFTER not in text and ROUTING_KEYS_BEFORE not in text:
         raise SystemExit(
             "The managed Hermes dashboard policy has changed; review the current "
             "NemoClaw dashboard seeding contract before applying this example"
@@ -88,7 +88,7 @@ def update_managed_policy(text: str) -> str:
     return text.replace(
         MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
     ).replace(
-        MANAGED_PATHS_BEFORE, MANAGED_PATHS_AFTER, 1
+        ROUTING_KEYS_BEFORE, ROUTING_KEYS_AFTER, 1
     )
 
 
