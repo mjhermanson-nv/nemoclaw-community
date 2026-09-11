@@ -158,6 +158,17 @@ third-party software terms. Do not automate that acceptance for another user.
 If you accept the displayed terms, follow the installer's documented acceptance
 prompt or flag.
 
+Refresh the shell command path after the installer. The maintained installation
+is user-local and must take precedence over older launchable binaries:
+
+```bash
+source "$HOME/.bashrc"
+export PATH="$HOME/.local/bin:$PATH"
+command -v nemoclaw nemohermes openshell
+nemoclaw --version
+openshell --version
+```
+
 #### Brev launchable compatibility check
 
 Perform the update before creating a sandbox. Some older revisions of the
@@ -198,7 +209,9 @@ sudo install -o root -g root -m 0755 \
   /usr/local/bin/
 sudo systemctl restart openshell-gateway.service
 
-export OPENSHELL_LOCAL_TLS_DIR=/var/lib/brev/openshell-gateway/tls
+set -a
+. /etc/nemoclaw/gateway-management.env
+set +a
 openshell gateway add \
   --name nemoclaw \
   --local \
