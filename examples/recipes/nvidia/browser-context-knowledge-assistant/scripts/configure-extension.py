@@ -14,6 +14,8 @@ SOURCE = ROOT / "extension"
 
 
 def validated_origin(value: str) -> str:
+    if not value:
+        return ""
     parsed = urlsplit(value.rstrip("/"))
     if not parsed.hostname:
         raise argparse.ArgumentTypeError("Hermes origin must include a host")
@@ -40,7 +42,7 @@ def validated_path(value: str) -> str:
 
 
 parser = argparse.ArgumentParser(description="Build an unpacked Ask NemoClaw extension")
-parser.add_argument("--hermes-origin", required=True, type=validated_origin)
+parser.add_argument("--hermes-origin", default="", type=validated_origin)
 parser.add_argument("--service-path", type=validated_path, default="/api/plugins/ask-nemoclaw")
 parser.add_argument("--dashboard-path", type=validated_path, default="/")
 parser.add_argument("--output", type=Path, default=ROOT / "build" / "extension")
@@ -51,8 +53,9 @@ for name in ("service-worker.js", "sidepanel.html", "sidepanel.css", "sidepanel.
     shutil.copy2(SOURCE / name, args.output / name)
 
 manifest_text = (SOURCE / "manifest.template.json").read_text(encoding="utf-8")
-manifest_text = manifest_text.replace("__HERMES_ORIGIN__", args.hermes_origin)
 manifest = json.loads(manifest_text)
+if args.hermes_origin:
+    manifest["host_permissions"] = [f"{args.hermes_origin}/*"]
 (args.output / "manifest.json").write_text(
     json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
     encoding="utf-8",

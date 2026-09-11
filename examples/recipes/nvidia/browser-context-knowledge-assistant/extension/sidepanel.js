@@ -21,12 +21,9 @@ function normalizedDeploymentUrl(value) {
 }
 const DEFAULT_NEMOCLAW_SERVICE_URL = normalizedDeploymentUrl(`${DEFAULT_NEMOCLAW_ORIGIN}${DEFAULT_SERVICE_PATH}`);
 const DEFAULT_NEMOCLAW_DASHBOARD_URL = normalizedDeploymentUrl(`${DEFAULT_NEMOCLAW_ORIGIN}${DEFAULT_DASHBOARD_PATH}`);
-if (!DEFAULT_NEMOCLAW_SERVICE_URL || !DEFAULT_NEMOCLAW_DASHBOARD_URL) {
-  throw new Error("Ask NemoClaw requires HTTPS or an HTTP loopback NemoClaw origin");
-}
 let nemoClawOrigin = DEFAULT_NEMOCLAW_ORIGIN;
-let nemoClawServiceUrl = DEFAULT_NEMOCLAW_SERVICE_URL;
-let nemoClawDashboardUrl = DEFAULT_NEMOCLAW_DASHBOARD_URL;
+let nemoClawServiceUrl = DEFAULT_NEMOCLAW_SERVICE_URL || "";
+let nemoClawDashboardUrl = DEFAULT_NEMOCLAW_DASHBOARD_URL || "";
 let nemoClawServiceUrls = [];
 const conversationsEndpoint = () => `${nemoClawServiceUrl}/conversations`;
 const MAX_PAGE_TEXT_CHARS = 200000;
@@ -117,10 +114,24 @@ async function loadNemoClawOrigin() {
     && await chrome.permissions.contains({ origins: [originPermission(candidateOrigin)] })
   ) {
     applyNemoClawUrl(candidateDashboard, legacyService);
-  } else {
-    applyNemoClawUrl(DEFAULT_NEMOCLAW_DASHBOARD_URL, DEFAULT_NEMOCLAW_SERVICE_URL);
+    elements.nemoClawUrl.value = nemoClawDashboardUrl;
+    return true;
   }
-  elements.nemoClawUrl.value = nemoClawDashboardUrl;
+  if (
+    DEFAULT_NEMOCLAW_DASHBOARD_URL
+    && DEFAULT_NEMOCLAW_SERVICE_URL
+    && await chrome.permissions.contains({ origins: [originPermission(DEFAULT_NEMOCLAW_ORIGIN)] })
+  ) {
+    applyNemoClawUrl(DEFAULT_NEMOCLAW_DASHBOARD_URL, DEFAULT_NEMOCLAW_SERVICE_URL);
+    elements.nemoClawUrl.value = nemoClawDashboardUrl;
+    return true;
+  }
+  nemoClawOrigin = "";
+  nemoClawServiceUrl = "";
+  nemoClawDashboardUrl = "";
+  nemoClawServiceUrls = [];
+  elements.nemoClawUrl.value = "";
+  return false;
 }
 
 function showSettings() {
@@ -141,7 +152,7 @@ async function saveSettings(event) {
   const candidateOrigin = new URL(candidateDashboard).origin;
   const granted = await chrome.permissions.request({ origins: [originPermission(candidateOrigin)] });
   if (!granted) {
-    elements.settingsError.textContent = "Chrome did not grant access to this NemoHermes origin.";
+    elements.settingsError.textContent = "Chrome did not grant access to this NemoClaw origin.";
     elements.settingsError.hidden = false;
     return;
   }
@@ -671,6 +682,11 @@ async function resolveNemoClawServiceUrl() {
 }
 
 async function checkNemoClawConnection(showFailure = true) {
+  if (!nemoClawDashboardUrl) {
+    setConnectionState("unavailable", "NemoClaw is not configured");
+    showSettings();
+    return false;
+  }
   elements.checkConnectionButton.disabled = true;
   setConnectionState("checking", "Checking NemoClaw…");
   try {
@@ -890,6 +906,11 @@ function newIdempotencyKey() {
 }
 
 async function submitMessage(retryPending = false) {
+  if (!nemoClawDashboardUrl) {
+    showError("Configure NemoClaw", "Open Settings and enter the HTTPS URL for your NemoClaw deployment.", false, null);
+    showSettings();
+    return;
+  }
   const prompt = elements.prompt.value.trim();
   if (!retryPending && !prompt) {
     showError("Message required", "Enter the instruction you want NemoClaw to follow.", false, null);
@@ -961,8 +982,14 @@ async function stopActiveJob() {
 async function initialize() {
   clearError();
   showStatus("loading");
-  await loadNemoClawOrigin();
+  const configured = await loadNemoClawOrigin();
   await refreshActivePage(false);
+  if (!configured) {
+    hideStatus();
+    setConnectionState("unavailable", "NemoClaw is not configured");
+    showSettings();
+    return;
+  }
   try {
     const stored = await chrome.storage.local.get("askNemoClawConversationId");
     await resolveNemoClawServiceUrl();
@@ -987,10 +1014,13 @@ elements.retryButton.addEventListener("click", () => retryAction?.());
 elements.newConversationButton.addEventListener("click", () => createConversation().catch(error => showError("Conversation could not start", error.message, false, () => createConversation())));
 elements.refreshButton.addEventListener("click", refreshPageAndCreateConversation);
 elements.checkConnectionButton.addEventListener("click", () => checkNemoClawConnection(true));
-elements.openNemoClawButton.addEventListener("click", () => chrome.tabs.create({ url: nemoClawDashboardUrl }));
+elements.openNemoClawButton.addEventListener("click", () => {
+  if (nemoClawDashboardUrl) chrome.tabs.create({ url: nemoClawDashboardUrl });
+  else showSettings();
+});
 elements.settingsButton.addEventListener("click", showSettings);
 elements.settingsForm.addEventListener("submit", event => saveSettings(event).catch(error => {
-  elements.settingsError.textContent = error.message || "The NemoHermes settings could not be saved.";
+  elements.settingsError.textContent = error.message || "The NemoClaw settings could not be saved.";
   elements.settingsError.hidden = false;
 }));
 elements.cancelSettingsButton.addEventListener("click", () => { elements.settingsCard.hidden = true; });
@@ -1004,7 +1034,10 @@ elements.conversationSelect.addEventListener("change", async () => {
   catch (error) { showError("Conversation could not load", error.message, false, () => loadConversation(elements.conversationSelect.value)); }
 });
 elements.stopButton.addEventListener("click", stopActiveJob);
-elements.signInButton.addEventListener("click", () => chrome.tabs.create({ url: new URL("/login", nemoClawDashboardUrl).href }));
+elements.signInButton.addEventListener("click", () => {
+  if (nemoClawDashboardUrl) chrome.tabs.create({ url: new URL("/login", nemoClawDashboardUrl).href });
+  else showSettings();
+});
 elements.prompt.addEventListener("keydown", event => {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();

@@ -32,6 +32,8 @@ fi
 node "$ROOT/tests/test_sidepanel_parsing.js"
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
+  --output "$ROOT/build/portable-verification-extension"
+"$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
   --hermes-origin https://hermes.example.com \
   --output "$ROOT/build/verification-extension"
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
@@ -44,6 +46,10 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
   --output "$ROOT/build/brev-verification-extension"
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
+test -s "$ROOT/build/portable-verification-extension/manifest.json"
+"$PYTHON_BIN" -c 'import json,sys; assert json.load(open(sys.argv[1]))["host_permissions"] == []' \
+  "$ROOT/build/portable-verification-extension/manifest.json"
+grep -Fq 'hermesOrigin: ""' "$ROOT/build/portable-verification-extension/config.js"
 test -s "$ROOT/build/loopback-verification-extension/manifest.json"
 grep -Fq 'servicePath: "/ask-nemoclaw"' "$ROOT/build/brev-verification-extension/config.js"
 grep -Fq 'dashboardPath: "/"' "$ROOT/build/brev-verification-extension/config.js"

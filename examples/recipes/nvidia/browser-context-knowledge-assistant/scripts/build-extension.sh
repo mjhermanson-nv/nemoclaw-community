@@ -5,7 +5,7 @@
 set -Eeuo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-HERMES_ORIGIN="${1:-http://127.0.0.1:18789}"
+HERMES_ORIGIN="${1:-}"
 SERVICE_PATH="${2:-/api/plugins/ask-nemoclaw}"
 DASHBOARD_PATH="${3:-/}"
 
