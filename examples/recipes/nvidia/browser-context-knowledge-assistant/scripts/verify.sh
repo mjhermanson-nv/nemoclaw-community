@@ -30,6 +30,7 @@ if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/n
   exit 1
 fi
 node "$ROOT/tests/test_sidepanel_parsing.js"
+"$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
   --output "$ROOT/build/portable-verification-extension"
@@ -114,6 +115,7 @@ printf '%s\n' \
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
+test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_auth.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1

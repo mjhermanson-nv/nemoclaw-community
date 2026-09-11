@@ -326,6 +326,32 @@ nemohermes ask-nemoclaw status
 nemohermes ask-nemoclaw dashboard-url --quiet
 ```
 
+Configure Hermes's bundled username/password provider before exposing the
+dashboard. Run the helper from an interactive sandbox shell so the password is
+entered with terminal echo disabled and never appears in a command argument,
+repository file, or extension setting:
+
+```bash
+nemohermes ask-nemoclaw connect
+python /opt/hermes/plugins/ask-nemoclaw/configure_dashboard_auth.py
+exit
+nemohermes ask-nemoclaw gateway restart
+```
+
+The helper stores only a scrypt password hash and a randomly generated session
+signing secret in Hermes's mode-`0600` environment file. The browser extension
+does not receive or retain the username or password. After the restart, verify
+that Hermes advertises the provider:
+
+```bash
+curl -s http://127.0.0.1:18789/api/status \
+  | jq '{auth_required, auth_providers}'
+```
+
+`auth_providers` must include `"basic"`. Brev's Secure Link remains the outer
+authenticated TLS boundary; the Hermes login is an additional application
+authentication gate.
+
 ### 4. Provide an authenticated Brev route
 
 For a shared Hermes deployment, place Hermes behind the platform's authenticated
@@ -353,9 +379,10 @@ It never prompts for or accepts a password.
 In the Brev **Access** page, create a second HTTP Secure Link with
 **Destination Port** `18889`. Use this new hostname for the extension. Do not
 point the Secure Link directly at the Hermes dashboard port (`18789`, `18790`,
-or another selected port). Direct exposure of the Hermes port causes the
-**Sign-in unavailable** page because Hermes requires its own authentication
-provider for a non-loopback host.
+or another selected port). Direct exposure bypasses the recipe's hostname
+adapter and is unsupported. If Hermes displays **Sign-in unavailable**, its
+authentication provider was not configured or the gateway was not restarted
+after setup.
 
 The default dashboard port is `18789`. If NemoClaw selected another port, pass
 it explicitly:
