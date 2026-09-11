@@ -8,9 +8,23 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-ask-nemoclaw}"
 NEMOCLAW_SOURCE="${NEMOCLAW_SOURCE:-}"
 
-for required_command in docker openshell nemohermes python3; do
+# The Brev launchable may retain older system binaries after the maintained
+# installer places current binaries under ~/.local/bin. Prefer the current
+# user-local installation explicitly instead of depending on shell PATH order.
+NEMOHERMES_BIN="${NEMOHERMES_BIN:-$HOME/.local/bin/nemohermes}"
+OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
+[[ -x "$NEMOHERMES_BIN" ]] || NEMOHERMES_BIN="$(command -v nemohermes || true)"
+[[ -x "$OPENSHELL_BIN" ]] || OPENSHELL_BIN="$(command -v openshell || true)"
+
+for required_command in docker python3; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     printf 'Required command is unavailable: %s\n' "$required_command" >&2
+    exit 1
+  fi
+done
+for required_path in "$NEMOHERMES_BIN" "$OPENSHELL_BIN"; do
+  if [[ -z "$required_path" || ! -x "$required_path" ]]; then
+    printf 'Required NemoClaw command is unavailable: %s\n' "$required_path" >&2
     exit 1
   fi
 done
@@ -26,7 +40,7 @@ EOF
   exit 1
 fi
 
-if ! openshell sandbox list >/dev/null; then
+if ! "$OPENSHELL_BIN" sandbox list >/dev/null; then
   cat >&2 <<'EOF'
 The selected OpenShell gateway is unavailable. Start or register the gateway
 owned by the deployment, verify that `openshell sandbox list` succeeds, and
@@ -39,8 +53,8 @@ if [[ -z "$NEMOCLAW_SOURCE" ]]; then
   if [[ -d "$HOME/.nemoclaw/source/.git" ]]; then
     NEMOCLAW_SOURCE="$HOME/.nemoclaw/source"
   else
-    NEMOHERMES_BIN="$(readlink -f "$(command -v nemohermes)")"
-    NEMOCLAW_SOURCE="$(CDPATH= cd -- "$(dirname -- "$NEMOHERMES_BIN")/.." && pwd)"
+    NEMOHERMES_REAL_BIN="$(readlink -f "$NEMOHERMES_BIN")"
+    NEMOCLAW_SOURCE="$(CDPATH= cd -- "$(dirname -- "$NEMOHERMES_REAL_BIN")/.." && pwd)"
   fi
 fi
 
@@ -48,10 +62,11 @@ python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOU
 
 printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
+printf 'NemoHermes command: %s\n' "$NEMOHERMES_BIN"
 # Do not pass --from here. Current generated Hermes images require BuildKit,
 # while user-supplied Dockerfiles intentionally remain on the OpenShell
 # gateway builder trust boundary. Preparing the installed Hermes source and
 # using the normal generated-image path preserves both requirements.
-nemohermes onboard \
+"$NEMOHERMES_BIN" onboard \
   --name "$SANDBOX_NAME" \
   "$@"
