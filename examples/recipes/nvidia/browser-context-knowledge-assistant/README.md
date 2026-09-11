@@ -122,11 +122,40 @@ Chrome's toolbar. Chrome internal pages are rejected. A page without readable
 DOM text can still be submitted when the extension captures a valid viewport
 image.
 
-The inference path must provide image understanding. Use either a multimodal
-primary model or a configured Hermes auxiliary vision model. A text-only model
-without auxiliary vision cannot process the viewport image and produces a
-vision-configuration failure. Confirm that the configured provider is approved
-to receive the rendered page image and readable page text.
+The inference path must provide image understanding. The tested NemoClaw and
+OpenShell configuration enforces one model for every inference request in the
+workspace. That route overrides a different model selected through Hermes's
+auxiliary-vision setting. Select a multimodal primary model during onboarding;
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` is the model used by this
+recipe's visual-context test. A text-only primary route cannot process the
+viewport image. Confirm that the configured provider is approved to receive
+the rendered page image and readable page text.
+
+## Installation Approaches
+
+The supported and reproducible path in this recipe installs the Hermes plugin
+and local NeMo Relay configuration while building the sandbox image. This
+ensures plugin enablement, the Brev loopback trust marker, Python dependency
+compatibility, and local trace configuration are present when the sandbox
+starts and when it is rebuilt.
+
+A shorter development path based on `hermes plugins install` is being
+evaluated, but is not yet a supported procedure in this recipe. Before it can
+replace image-time installation for evaluation, the standalone plugin must be
+verified for:
+
+- installation from an immutable Git commit and this monorepo subdirectory;
+- explicit Hermes plugin enablement and dashboard API discovery;
+- dashboard restart and host reboot persistence;
+- the minimum OpenShell policy required to retrieve the Git source;
+- authenticated Brev Secure Link behavior without weakening the loopback
+  trust check; and
+- NemoClaw sandbox rebuild, backup, and restore behavior.
+
+The intended future quick start is: launch and onboard NemoClaw with Hermes,
+install and enable the pinned Ask NemoClaw plugin, run one host-side Brev route
+helper, and load the Chrome extension. Keep the image-time path for a pinned,
+reproducible deployment.
 
 ## Start Here
 
@@ -144,19 +173,17 @@ to incur storage charges.
 
 ### 2. Install or update NemoClaw for Hermes
 
-Connect to the Brev instance and run the maintained installer from a temporary
-directory:
+Connect to the Brev instance. Before onboarding or entering an inference
+credential, use NemoClaw's supported update command:
 
 ```bash
-cd /tmp
-curl -fsSL https://www.nvidia.com/nemoclaw.sh \
-  | NEMOCLAW_AGENT=hermes bash
+nemoclaw update --check
+nemoclaw update --yes
 ```
 
-The installer requires the operator to review and explicitly accept the
-third-party software terms. Do not automate that acceptance for another user.
-If you accept the displayed terms, follow the installer's documented acceptance
-prompt or flag.
+`nemoclaw update` runs the maintained HTTPS installer flow. Review and
+explicitly accept any third-party software terms it presents. Do not automate
+that acceptance for another user.
 
 Refresh the shell command path after the installer. The maintained installation
 is user-local and must take precedence over older launchable binaries:
@@ -196,45 +223,35 @@ docker info --format 'Driver={{.Driver}} Status={{json .DriverStatus}}'
 The result must report `Driver=overlay2` and must not contain
 `io.containerd.snapshotter.v1`.
 
-If the Brev launchable uses the system service
-`openshell-gateway.service`, synchronize that service with the OpenShell
-installation supplied by the updated NemoClaw CLI, then wait for the gateway
-API rather than relying only on systemd's process state:
+If the launchable uses the system service `openshell-gateway.service`, it owns
+the host gateway. Do not replace its binaries or start the separate user-level
+gateway. After cloning this recipe, register that declared local gateway with
+the updated OpenShell client and then run the read-only compatibility check:
 
 ```bash
-sudo install -o root -g root -m 0755 \
-  "$HOME/.local/bin/openshell" \
-  "$HOME/.local/bin/openshell-gateway" \
-  "$HOME/.local/bin/openshell-sandbox" \
-  /usr/local/bin/
-sudo systemctl restart openshell-gateway.service
-
-set -a
-. /etc/nemoclaw/gateway-management.env
-set +a
-openshell gateway add \
-  --name nemoclaw \
-  --local \
-  https://127.0.0.1:8080
-openshell gateway select nemoclaw
-
-for attempt in {1..30}; do
-  if openshell sandbox list; then
-    break
-  fi
-  sleep 1
-done
+bash scripts/register-brev-gateway.sh
+bash scripts/check-brev-host.sh
 ```
 
-The final command must complete successfully before running this recipe's
-onboarding script. Do not start the separate user-level gateway service when
-the Brev launchable declares the system service as its gateway owner.
+The registration helper refuses to continue unless the Brev-owned gateway and
+updated user-local installation report the same OpenShell version. It reads the
+local TLS path declared by the launchable and changes only the user's OpenShell
+gateway selection. It does not replace or restart the gateway. The check then
+verifies the Docker driver, gateway access, and an empty sandbox inventory.
+Both scripts intentionally stop when an older launchable retains an
+incompatible gateway. Copying newer OpenShell binaries into
+`/usr/local/bin` is not a safe workaround: the launchable operating system can
+provide an older glibc than those binaries require. Use a refreshed launchable
+or an NVIDIA-supported launchable upgrade procedure when this check fails.
 
-Clone this repository on the Brev instance after the installer completes:
+Clone this repository after the update completes, then run the compatibility
+check described above:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/nvidia/browser-context-knowledge-assistant
+bash scripts/register-brev-gateway.sh
+bash scripts/check-brev-host.sh
 ```
 
 ### 3. Build the custom Hermes sandbox
@@ -253,6 +270,11 @@ process. It installs the checksum-pinned NeMo Relay
 `uv pip check`; this version satisfies the Hermes dependency ranges tested by
 the example. It also preserves the built-in `nemoclaw` plugin and the rest of
 the standard image.
+The script creates the one sandbox required by this example. Do not create a
+standard Hermes sandbox first: every sandbox registered to the same OpenShell
+gateway shares one forced inference route, and a second sandbox recorded with
+a different model blocks a supported model switch.
+
 The script then uses NemoClaw's normal generated-image path. Do not add
 `--from`: current generated Hermes images require local BuildKit, while custom
 Dockerfiles intentionally remain on the OpenShell gateway builder trust
@@ -264,7 +286,10 @@ bash scripts/onboard.sh
 
 Onboarding asks you to select an inference provider and enter its credential.
 Use the normal NemoClaw credential prompt. Do not place the credential in this
-repository or in the Chrome extension.
+repository or in the Chrome extension. To exercise viewport understanding,
+select `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` as the primary model.
+Selecting a text-only primary model and then choosing Omni only in Hermes's
+auxiliary-vision dialog does not change OpenShell's enforced route.
 
 The default sandbox name is `ask-nemoclaw`. To use another name of 19 or fewer
 characters:
@@ -493,6 +518,8 @@ For a live verification:
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay configuration, and managed enablement to the complete Hermes image source. |
+| `scripts/check-brev-host.sh` | Performs read-only launchable compatibility checks before onboarding. |
+| `scripts/register-brev-gateway.sh` | Safely selects the compatible Brev-owned local gateway without replacing it. |
 | `scripts/onboard.sh` | Builds and onboards the custom Hermes sandbox. |
 | `scripts/build-extension.sh` | Produces an unpacked extension for one exact Hermes origin. |
 | `deploy/nginx/ask-nemoclaw-server.conf` | Dedicated proxy for a single-user authenticated Ask NemoClaw Brev Secure Link. |
