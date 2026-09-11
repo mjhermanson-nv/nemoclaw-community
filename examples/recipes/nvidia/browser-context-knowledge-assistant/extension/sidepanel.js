@@ -27,6 +27,7 @@ if (!DEFAULT_NEMOCLAW_SERVICE_URL || !DEFAULT_NEMOCLAW_DASHBOARD_URL) {
 let nemoClawOrigin = DEFAULT_NEMOCLAW_ORIGIN;
 let nemoClawServiceUrl = DEFAULT_NEMOCLAW_SERVICE_URL;
 let nemoClawDashboardUrl = DEFAULT_NEMOCLAW_DASHBOARD_URL;
+let nemoClawServiceUrls = [];
 const conversationsEndpoint = () => `${nemoClawServiceUrl}/conversations`;
 const MAX_PAGE_TEXT_CHARS = 200000;
 const MAX_SELECTED_TEXT_CHARS = 50000;
@@ -43,8 +44,7 @@ const elements = {
   settingsButton: document.getElementById("settings-button"),
   settingsCard: document.getElementById("settings-card"),
   settingsForm: document.getElementById("settings-form"),
-  nemoClawServiceUrl: document.getElementById("nemoclaw-service-url"),
-  nemoClawDashboardUrl: document.getElementById("nemoclaw-dashboard-url"),
+  nemoClawUrl: document.getElementById("nemoclaw-url"),
   settingsError: document.getElementById("settings-error"),
   cancelSettingsButton: document.getElementById("cancel-settings-button"),
   conversationSelect: document.getElementById("conversation-select"),
@@ -80,77 +80,82 @@ function originPermission(origin) {
   return `${origin}/*`;
 }
 
+function inferredServiceUrls(dashboardUrl, preferredServiceUrl = null) {
+  const origin = new URL(dashboardUrl).origin;
+  const paths = [
+    preferredServiceUrl ? new URL(preferredServiceUrl).pathname : null,
+    DEFAULT_SERVICE_PATH,
+    CANONICAL_SERVICE_PATH,
+    "/ask-nemoclaw"
+  ].filter(Boolean);
+  return [...new Set(paths.map(path => normalizedDeploymentUrl(`${origin}${path}`)).filter(Boolean))];
+}
+
+function applyNemoClawUrl(dashboardUrl, preferredServiceUrl = null) {
+  nemoClawDashboardUrl = dashboardUrl;
+  nemoClawOrigin = new URL(dashboardUrl).origin;
+  nemoClawServiceUrls = inferredServiceUrls(dashboardUrl, preferredServiceUrl);
+  nemoClawServiceUrl = nemoClawServiceUrls[0];
+}
+
 async function loadNemoClawOrigin() {
   const stored = await chrome.storage.local.get([
+    "askNemoClawUrl",
     "askNemoClawServiceUrl",
     "askNemoClawDashboardUrl",
     "askNemoClawOrigin"
   ]);
   const legacyOrigin = normalizedDeploymentUrl(stored.askNemoClawOrigin || "");
-  const candidateService = normalizedDeploymentUrl(
-    stored.askNemoClawServiceUrl || (legacyOrigin ? `${legacyOrigin}${CANONICAL_SERVICE_PATH}` : "")
-  );
   const candidateDashboard = normalizedDeploymentUrl(
-    stored.askNemoClawDashboardUrl || legacyOrigin || ""
+    stored.askNemoClawUrl || stored.askNemoClawDashboardUrl || legacyOrigin || ""
   );
-  const candidateOrigin = candidateService ? new URL(candidateService).origin : "";
+  const legacyService = normalizedDeploymentUrl(stored.askNemoClawServiceUrl || "");
+  const candidateOrigin = candidateDashboard ? new URL(candidateDashboard).origin : "";
   if (
-    candidateService
-    && candidateDashboard
-    && new URL(candidateDashboard).origin === candidateOrigin
+    candidateDashboard
+    && (!legacyService || new URL(legacyService).origin === candidateOrigin)
     && await chrome.permissions.contains({ origins: [originPermission(candidateOrigin)] })
   ) {
-    nemoClawOrigin = candidateOrigin;
-    nemoClawServiceUrl = candidateService;
-    nemoClawDashboardUrl = candidateDashboard;
+    applyNemoClawUrl(candidateDashboard, legacyService);
   } else {
-    nemoClawOrigin = DEFAULT_NEMOCLAW_ORIGIN;
-    nemoClawServiceUrl = DEFAULT_NEMOCLAW_SERVICE_URL;
-    nemoClawDashboardUrl = DEFAULT_NEMOCLAW_DASHBOARD_URL;
+    applyNemoClawUrl(DEFAULT_NEMOCLAW_DASHBOARD_URL, DEFAULT_NEMOCLAW_SERVICE_URL);
   }
-  elements.nemoClawServiceUrl.value = nemoClawServiceUrl;
-  elements.nemoClawDashboardUrl.value = nemoClawDashboardUrl;
+  elements.nemoClawUrl.value = nemoClawDashboardUrl;
 }
 
 function showSettings() {
-  elements.nemoClawServiceUrl.value = nemoClawServiceUrl;
-  elements.nemoClawDashboardUrl.value = nemoClawDashboardUrl;
+  elements.nemoClawUrl.value = nemoClawDashboardUrl;
   elements.settingsError.hidden = true;
   elements.settingsCard.hidden = false;
-  elements.nemoClawServiceUrl.focus();
+  elements.nemoClawUrl.focus();
 }
 
 async function saveSettings(event) {
   event.preventDefault();
-  const candidateService = normalizedDeploymentUrl(String(elements.nemoClawServiceUrl.value || "").trim());
-  const candidateDashboard = normalizedDeploymentUrl(String(elements.nemoClawDashboardUrl.value || "").trim());
-  if (!candidateService || !candidateDashboard) {
-    elements.settingsError.textContent = "Enter valid HTTPS URLs, or HTTP localhost URLs, without credentials, queries, or fragments.";
+  const candidateDashboard = normalizedDeploymentUrl(String(elements.nemoClawUrl.value || "").trim());
+  if (!candidateDashboard) {
+    elements.settingsError.textContent = "Enter a valid HTTPS NemoClaw URL, or an HTTP localhost URL, without credentials, a query, or a fragment.";
     elements.settingsError.hidden = false;
     return;
   }
-  const candidateOrigin = new URL(candidateService).origin;
-  if (new URL(candidateDashboard).origin !== candidateOrigin) {
-    elements.settingsError.textContent = "The service and dashboard URLs must use the same origin.";
-    elements.settingsError.hidden = false;
-    return;
-  }
+  const candidateOrigin = new URL(candidateDashboard).origin;
   const granted = await chrome.permissions.request({ origins: [originPermission(candidateOrigin)] });
   if (!granted) {
     elements.settingsError.textContent = "Chrome did not grant access to this NemoHermes origin.";
     elements.settingsError.hidden = false;
     return;
   }
-  nemoClawOrigin = candidateOrigin;
-  nemoClawServiceUrl = candidateService;
-  nemoClawDashboardUrl = candidateDashboard;
+  applyNemoClawUrl(candidateDashboard);
   dashboardSessionToken = null;
   dashboardSessionTokenOrigin = null;
   await chrome.storage.local.set({
-    askNemoClawServiceUrl: candidateService,
-    askNemoClawDashboardUrl: candidateDashboard
+    askNemoClawUrl: candidateDashboard
   });
-  await chrome.storage.local.remove("askNemoClawOrigin");
+  await chrome.storage.local.remove([
+    "askNemoClawOrigin",
+    "askNemoClawServiceUrl",
+    "askNemoClawDashboardUrl"
+  ]);
   await chrome.storage.local.remove("askNemoClawConversationId");
   activeConversationId = null;
   elements.settingsCard.hidden = true;
@@ -642,11 +647,22 @@ async function authenticatedFetch(url, options = {}) {
   }
 }
 
+async function resolveNemoClawServiceUrl() {
+  let lastResponse = null;
+  for (const candidate of nemoClawServiceUrls) {
+    nemoClawServiceUrl = candidate;
+    const response = await authenticatedFetch(conversationsEndpoint());
+    if (response.status !== 404) return response;
+    lastResponse = response;
+  }
+  return lastResponse || authenticatedFetch(conversationsEndpoint());
+}
+
 async function checkNemoClawConnection(showFailure = true) {
   elements.checkConnectionButton.disabled = true;
   setConnectionState("checking", "Checking NemoClaw…");
   try {
-    const response = await authenticatedFetch(conversationsEndpoint());
+    const response = await resolveNemoClawServiceUrl();
     await readJsonResponse(response, "NemoClaw did not return a valid connection response.");
     setConnectionState("connected", "Connected to NemoClaw");
     return true;
@@ -654,7 +670,7 @@ async function checkNemoClawConnection(showFailure = true) {
     if (error.authenticationRequired) {
       setConnectionState("authentication", "Sign-in required");
       if (showFailure) {
-        showError("Sign in to NemoClaw", "Open NemoClaw, sign in normally, and then select Check.", true, () => checkNemoClawConnection(true));
+        showError("Sign in to NemoClaw", "Open NemoClaw, sign in normally, then open Settings and select Check current connection.", true, () => checkNemoClawConnection(true));
       }
     } else {
       setConnectionState("unavailable", "NemoClaw is unavailable");
@@ -937,6 +953,7 @@ async function initialize() {
   await refreshActivePage(false);
   try {
     const stored = await chrome.storage.local.get("askNemoClawConversationId");
+    await resolveNemoClawServiceUrl();
     const selected = await loadConversationList(stored.askNemoClawConversationId || null);
     if (!selected) await createConversation();
   } catch (error) {

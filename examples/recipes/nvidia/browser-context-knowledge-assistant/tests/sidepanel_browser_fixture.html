@@ -22,9 +22,23 @@
       <section class="conversation-toolbar" aria-label="Conversation controls">
         <div class="connection-row" aria-label="NemoClaw connection">
           <span id="connection-status" class="connection-status" data-state="checking" aria-live="polite">Checking NemoClaw…</span>
-          <button id="check-connection-button" class="secondary compact" type="button">Check</button>
           <button id="open-nemoclaw-button" class="secondary compact" type="button">Open NemoClaw</button>
+          <button id="settings-button" class="secondary compact icon-button" type="button" aria-label="NemoClaw settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2.1-1.6-2-3.4L17 7a7.2 7.2 0 0 0-1.7-1L15 3h-4l-.4 3a7.2 7.2 0 0 0-1.7 1L6.5 6l-2 3.4L6.6 11a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2.1 1.6 2 3.4L9 17a7.2 7.2 0 0 0 1.7 1l.4 3h4l.4-3a7.2 7.2 0 0 0 1.7-1l2.4 1 2-3.4L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+          </button>
         </div>
+        <section id="settings-card" class="card settings-card" hidden aria-label="NemoClaw settings">
+          <form id="settings-form">
+            <label for="nemoclaw-url">NemoClaw URL</label>
+            <input id="nemoclaw-url" name="nemoclaw-url" type="url" required placeholder="https://hermes.example.com">
+            <p id="settings-error" class="settings-error" hidden></p>
+            <div class="button-row">
+              <button id="save-settings-button" type="submit">Save and connect</button>
+              <button id="check-connection-button" class="secondary" type="button">Check current connection</button>
+              <button id="cancel-settings-button" class="secondary" type="button">Cancel</button>
+            </div>
+          </form>
+        </section>
         <label for="conversation-select">Recent conversation</label>
         <div class="toolbar-row">
           <select id="conversation-select" aria-label="Recent conversation"></select>
@@ -98,8 +112,13 @@
           session: { get: async () => ({ askNemoClawTarget: null }) },
           local: {
             get: async () => ({ askNemoClawConversationId: storedConversationId }),
-            set: async value => { storedConversationId = value.askNemoClawConversationId; }
+            set: async value => { storedConversationId = value.askNemoClawConversationId; },
+            remove: async () => {}
           }
+        },
+        permissions: {
+          contains: async () => true,
+          request: async () => true
         },
         runtime: { onMessage: { addListener: () => {} } }
       };

@@ -102,6 +102,8 @@ button:hover { background: var(--green-bright); }
 button:disabled { cursor: wait; opacity: .55; }
 button.secondary { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); }
 button.compact { width: auto; flex: 0 0 auto; margin: 0; padding: 7px 11px; }
+.icon-button { display: inline-grid; width: 34px; height: 34px; place-items: center; padding: 7px; }
+.icon-button svg { width: 18px; height: 18px; fill: currentColor; }
 .button-row { display: flex; gap: 8px; }
 .button-row button { flex: 1; }
 
