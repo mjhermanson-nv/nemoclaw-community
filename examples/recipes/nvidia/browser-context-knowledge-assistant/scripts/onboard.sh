@@ -34,6 +34,11 @@ EOF
   fi
   export NEMOCLAW_GATEWAY_MANAGEMENT="$ROOT/deploy/brev/nemoclaw-managed-gateway.json"
   export NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH="${NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH:-1}"
+  # The launchable's interactive shell exports these paths for its retired
+  # externally supervised gateway. They must not override the current managed
+  # gateway's user-owned state and generated TLS bundle.
+  unset NEMOCLAW_OPENSHELL_GATEWAY_STATE_DIR
+  unset OPENSHELL_LOCAL_TLS_DIR
   GATEWAY_WILL_START=1
 elif [[ -n "${NEMOCLAW_GATEWAY_MANAGEMENT:-}" \
         && -r "$NEMOCLAW_GATEWAY_MANAGEMENT" ]] \

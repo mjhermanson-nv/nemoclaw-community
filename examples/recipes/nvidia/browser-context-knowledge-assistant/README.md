@@ -254,7 +254,10 @@ registration, and leaves the launchable's gateway data intact. The onboarding
 script selects an explicit `nemoclaw-managed` declaration and opts into
 NemoClaw's authenticated gateway compatibility container. This mode is needed
 because the tested launchable uses Ubuntu 22.04/glibc 2.35 while the current
-native OpenShell gateway requires a newer host ABI.
+native OpenShell gateway requires a newer host ABI. The script also clears the
+retired gateway's exported state and TLS paths for the onboarding child process
+so the managed gateway creates user-owned state under the normal NemoClaw
+directory.
 
 Do not copy newer OpenShell binaries into `/usr/local/bin`. Replacing individual
 binaries can leave the gateway and sandbox driver incompatible with each other.
