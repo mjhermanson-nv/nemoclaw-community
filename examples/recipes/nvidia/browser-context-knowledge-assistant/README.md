@@ -57,14 +57,15 @@ used for the side-panel rendering.
 
 Chrome grants temporary access to the active tab after the user selects the
 extension. Ask NemoClaw sends the prompt and bounded browser context to one
-authenticated Hermes origin. The plugin maps each browser conversation to a
+user-configured Hermes origin. The plugin maps each browser conversation to a
 separate non-PTY Hermes session. Hermes selects installed skills and tools,
 OpenShell applies runtime controls, and NeMo Relay records local ATIF traces.
 
 The Chrome extension can reach only an origin granted through Chrome host
-permissions. An authenticated HTTPS ingress is the recommended community
-deployment. The extension derives the service endpoint from the dashboard URL.
-It checks the standard Hermes path
+permissions. The Brev quick start uses an authenticated Brev CLI port forward
+to a loopback-only Hermes listener. A shared deployment instead requires an
+authenticated HTTPS ingress that supports API clients. The extension derives
+the service endpoint from the dashboard URL. It checks the standard Hermes path
 `/api/plugins/ask-nemoclaw` and the Brev adapter path `/ask-nemoclaw`.
 
 The community extension contains no initial deployment hostname. On first use,
@@ -335,28 +336,14 @@ nemohermes ask-nemoclaw status
 nemohermes ask-nemoclaw dashboard-url --quiet
 ```
 
-Configure Hermes's bundled username/password provider before exposing the
-dashboard. Run the helper from an interactive sandbox shell so the password is
-entered with terminal echo disabled and never appears in a command argument,
-repository file, or extension setting:
+Do not configure Hermes dashboard authentication for the Brev loopback quick
+start. The sandbox image contains a root-owned, read-only marker that permits
+one development identity only when Hermes sees a loopback hostname. External
+requests without a Hermes session remain unauthorized. The authenticated Brev
+CLI tunnel is the access boundary for this single-user development mode.
 
-```bash
-nemohermes ask-nemoclaw connect
-python /opt/hermes/plugins/ask-nemoclaw/configure_dashboard_auth.py
-exit
-```
-
-The helper enables Hermes's bundled `basic` authentication plugin and stores
-only a scrypt password hash and a randomly generated session-signing secret in
-Hermes's private `config.yaml`. It also removes dashboard-authentication entries
-left in `.env` by an earlier recipe version. The browser extension does not
-receive or retain the username or password. Restart the complete sandbox so the
-dashboard process reloads the provider:
-
-```bash
-nemohermes ask-nemoclaw stop
-nemohermes ask-nemoclaw start
-```
+The included `configure_dashboard_auth.py` helper is for a later shared HTTPS
+deployment. It is not part of the Brev quick start.
 
 ### 4. Forward Hermes to the workstation
 
@@ -369,10 +356,18 @@ brev port-forward <brev-instance-name> -p 18789:18789
 If NemoClaw selected a different dashboard port, use that number on both sides.
 Keep this terminal running while you use the extension.
 
-Open `http://127.0.0.1:18789/`, sign in to Hermes, and enter that same localhost
-URL in the extension settings. After the extension has copied the Hermes
-session into Chrome's memory-backed extension session, the dashboard tab can be
-closed. The port-forward command must continue running.
+Enter `http://127.0.0.1:18789` in the extension settings. No Hermes login is
+required in this loopback development mode. The extension should immediately
+create its first conversation. The port-forward command must continue running.
+
+If local port `18789` is already occupied, map another local port to the remote
+dashboard port, for example:
+
+```bash
+brev port-forward <brev-instance-name> -p 18790:18789
+```
+
+Then configure the extension with `http://127.0.0.1:18790`.
 
 Do not enter a Brev Secure Link such as `https://<port>-<id>.gobrev.dev` in the
 extension. Brev Secure Links protect web pages with redirect-based browser
@@ -389,7 +384,15 @@ reference for such an ingress; a Brev Secure Link is not that API ingress.
 
 ### 5. Build and load the Chrome extension
 
-Run this from the example directory on the workstation:
+On the workstation, clone the community repository if it is not already
+available, then enter the example directory:
+
+```bash
+git clone https://github.com/NVIDIA/nemoclaw-community.git
+cd nemoclaw-community/examples/recipes/nvidia/browser-context-knowledge-assistant
+```
+
+Build the portable extension:
 
 ```bash
 bash scripts/build-extension.sh
@@ -402,8 +405,8 @@ Then:
 3. Select **Load unpacked**.
 4. Select the printed `build/extension` directory.
 5. Pin **Ask NemoClaw** to the Chrome toolbar.
-6. Open the side panel, enter the authenticated NemoClaw HTTPS URL in Settings,
-   and approve Chrome's request for that exact origin.
+6. Open the side panel, enter `http://127.0.0.1:18789` in Settings, and approve
+   Chrome's request for that exact origin.
 
 Install this portable build once. Change deployments later from the Settings
 gear; rebuilding or reinstalling is not required.
@@ -488,9 +491,11 @@ Expected evidence:
 
 For a live verification:
 
-1. Open the Hermes dashboard and confirm ordinary dashboard chat still works.
-2. Sign in, close the Hermes dashboard tab, and confirm the extension still
-   lists or creates conversations.
+1. Start the Brev port forward and configure the extension with its localhost
+   URL. Confirm that the extension creates a conversation without a Hermes
+   login prompt.
+2. Open the Hermes dashboard through the same localhost URL and confirm
+   ordinary dashboard chat still works.
 3. Open a public page with readable text and a distinctive visible diagram or
    color, then select the extension icon.
 4. Ask for a short summary and a description of the visible diagram. Confirm
