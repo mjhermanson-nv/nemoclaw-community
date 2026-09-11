@@ -231,10 +231,10 @@ supported NemoClaw path for Hermes runtime additions is a custom sandbox image.
 The setup script finds the source checkout used by the installed `nemohermes`
 installation, copies the `ask-nemoclaw` Hermes plugin and local Relay
 configuration into that checkout, and enables both additions through
-NemoClaw's managed Hermes policy. The preparation also adds
-`plugins.enabled` to the reviewed dashboard-seeding paths so Hermes's isolated
-dashboard process authorizes the same plugin API as the main agent process. It
-installs the checksum-pinned NeMo Relay
+NemoClaw's managed Hermes policy. The preparation also adds the top-level
+`plugins` configuration to the reviewed dashboard-mirroring keys so Hermes's
+isolated dashboard process authorizes the same plugin API as the main agent
+process. It installs the checksum-pinned NeMo Relay
 `0.7.2` x86-64 wheel and verifies the complete Python environment with
 `uv pip check`; this version satisfies the Hermes dependency ranges tested by
 the example. It also preserves the built-in `nemoclaw` plugin and the rest of
