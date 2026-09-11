@@ -150,6 +150,7 @@ async function saveSettings(event) {
     return;
   }
   const candidateOrigin = new URL(candidateDashboard).origin;
+  const previousOrigin = nemoClawOrigin;
   const granted = await chrome.permissions.request({ origins: [originPermission(candidateOrigin)] });
   if (!granted) {
     elements.settingsError.textContent = "Chrome did not grant access to this NemoClaw origin.";
@@ -168,6 +169,9 @@ async function saveSettings(event) {
     "askNemoClawDashboardUrl"
   ]);
   await chrome.storage.local.remove("askNemoClawConversationId");
+  if (previousOrigin && previousOrigin !== candidateOrigin) {
+    await chrome.permissions.remove({ origins: [originPermission(previousOrigin)] });
+  }
   activeConversationId = null;
   elements.settingsCard.hidden = true;
   await initialize();

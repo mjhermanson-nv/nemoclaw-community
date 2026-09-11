@@ -46,6 +46,7 @@ assert.match(source, /checkNemoClawConnection/);
 assert.match(source, /Connected to NemoClaw/);
 assert.match(source, /Sign-in required/);
 assert.match(source, /chrome\.permissions\.request/);
+assert.match(source, /chrome\.permissions\.remove/);
 assert.match(source, /NemoClaw is not configured/);
 assert.match(source, /const configured = await loadNemoClawOrigin\(\)/);
 assert.doesNotMatch(source, /Ask NemoClaw requires HTTPS or an HTTP loopback NemoClaw origin/);
