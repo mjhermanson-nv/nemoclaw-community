@@ -65,6 +65,7 @@ printf '%s\n' \
   '' \
   'const MANAGED_POLICY_PATHS = [' \
   '  "updates.refresh_cua_driver",' \
+  '  "plugins.enabled",' \
   '] as const;' \
   '' \
   'export const config = {' \

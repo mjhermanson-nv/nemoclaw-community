@@ -25,6 +25,7 @@ ROUTING_KEYS_AFTER = (
     '  "plugins",\n'
     '] as const;'
 )
+LEGACY_MANAGED_PLUGIN_PATH = '  "plugins.enabled",\n'
 RELAY_VERSION = "0.7.2"
 RELAY_WHEEL_FILENAME = (
     "nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64."
@@ -89,6 +90,8 @@ def update_managed_policy(text: str) -> str:
         MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
     ).replace(
         ROUTING_KEYS_BEFORE, ROUTING_KEYS_AFTER, 1
+    ).replace(
+        LEGACY_MANAGED_PLUGIN_PATH, "", 1
     )
 
 
