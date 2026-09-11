@@ -23,8 +23,7 @@ OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
 # lifecycle handoff, select NemoClaw-managed mode and its documented,
 # authenticated compatibility container.
 GATEWAY_WILL_START=0
-if [[ -z "${NEMOCLAW_GATEWAY_MANAGEMENT:-}" \
-      && -e /etc/nemoclaw/gateway-management.json ]]; then
+if [[ -r /etc/nemoclaw/gateway-management.env ]]; then
   if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == active ]]; then
     cat >&2 <<'EOF'
 The legacy Brev OpenShell gateway is still active. Run
@@ -35,6 +34,11 @@ EOF
   fi
   export NEMOCLAW_GATEWAY_MANAGEMENT="$ROOT/deploy/brev/nemoclaw-managed-gateway.json"
   export NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH="${NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH:-1}"
+  GATEWAY_WILL_START=1
+elif [[ -n "${NEMOCLAW_GATEWAY_MANAGEMENT:-}" \
+        && -r "$NEMOCLAW_GATEWAY_MANAGEMENT" ]] \
+     && grep -Eq '"mode"[[:space:]]*:[[:space:]]*"nemoclaw-managed"' \
+        "$NEMOCLAW_GATEWAY_MANAGEMENT"; then
   GATEWAY_WILL_START=1
 fi
 

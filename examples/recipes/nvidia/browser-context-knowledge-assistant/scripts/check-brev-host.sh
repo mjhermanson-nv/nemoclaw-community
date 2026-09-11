@@ -7,7 +7,7 @@ set -Eeuo pipefail
 failures=0
 brev_handoff_ready=0
 
-if [[ -e /etc/nemoclaw/gateway-management.json \
+if [[ -r /etc/nemoclaw/gateway-management.env \
       && "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" != active ]]; then
   brev_handoff_ready=1
 fi
@@ -88,7 +88,7 @@ if systemctl list-unit-files openshell-gateway.service >/dev/null 2>&1; then
     if [[ -z "$system_gateway_version" || -z "$user_gateway_version" ]]; then
       report_failure "An OpenShell gateway version could not be inspected"
     elif [[ "$system_gateway_version" != "$user_gateway_version" ]]; then
-      printf 'INFO: The Brev-owned and user-local gateway binaries differ; the successful mTLS gateway probe above is authoritative.\n'
+      printf 'INFO: The retired Brev gateway and current user-local gateway binaries differ; onboarding will start the current version.\n'
     fi
   else
     report_failure "/usr/local/bin/openshell-gateway is unavailable"
