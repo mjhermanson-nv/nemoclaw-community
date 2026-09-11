@@ -47,7 +47,7 @@ if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == 
   fi
 
   printf 'The legacy Brev gateway is empty. Handing lifecycle control to the updated NemoClaw installation.\n'
-  sudo systemctl disable --now openshell-gateway.service
+  sudo -n systemctl disable --now openshell-gateway.service
 fi
 
 if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == active ]]; then

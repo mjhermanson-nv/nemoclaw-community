@@ -338,9 +338,12 @@ configuration helper creates a separate Nginx listener on port `18889` that:
 Run the helper after the sandbox reports Ready:
 
 ```bash
-sudo -v
+sudo -n true
 bash scripts/configure-brev-nginx.sh
 ```
+
+The first command verifies the launchable's passwordless administrative access.
+It never prompts for or accepts a password.
 
 In the Brev **Access** page, create a second HTTP Secure Link with
 **Destination Port** `18889`. Use this new hostname for the extension. Do not

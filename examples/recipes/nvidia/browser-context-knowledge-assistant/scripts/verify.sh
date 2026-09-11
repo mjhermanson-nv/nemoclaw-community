@@ -51,7 +51,12 @@ grep -Fq 'listen 0.0.0.0:__PROXY_PORT__' "$ROOT/deploy/nginx/ask-nemoclaw-server
 grep -Fq 'proxy_set_header Host 127.0.0.1:__DASHBOARD_PORT__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
-grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
+grep -Fq 'sudo -n nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
+if grep -Eq 'sudo[[:space:]]+(ss|test|cp|install|nginx|rm|systemctl)' \
+  "$ROOT/scripts/configure-brev-nginx.sh" "$ROOT/scripts/prepare-brev-gateway.sh"; then
+  printf 'Brev helpers must use noninteractive sudo -n\n' >&2
+  exit 1
+fi
 grep -Fq 'Operation is not implemented or not supported' "$ROOT/README.md"
 grep -Fq 'Do not copy newer OpenShell binaries' "$ROOT/README.md"
 grep -Fq "Do not run the launchable's NemoClaw onboarding flow" "$ROOT/README.md"
