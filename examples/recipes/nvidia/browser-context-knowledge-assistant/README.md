@@ -308,6 +308,14 @@ sudo -v
 bash scripts/configure-brev-nginx.sh
 ```
 
+In the Brev **Access** page, create or edit the HTTP Secure Link so its
+**Destination Port** is `80`. Do not point the Secure Link directly at the
+Hermes dashboard port (`18789`, `18790`, or another selected port). Port `80`
+is the authenticated Brev Nginx entry point; it supplies the loopback Host and
+Origin values expected by the single-user Hermes dashboard. Direct exposure of
+the Hermes port causes the **Sign-in unavailable** page because Hermes requires
+its own authentication provider for a non-loopback host.
+
 The default dashboard port is `18789`. If NemoClaw selected another port, pass
 it explicitly:
 
