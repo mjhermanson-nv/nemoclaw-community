@@ -42,7 +42,7 @@ RELAY_WHEEL_SHA256 = (
 PLUGIN_LAYER = f"""{BEGIN_MARKER}
 # This source checkout is dedicated to the community example. Keep the complete
 # managed Hermes image contract above and add only this recipe's files.
-COPY local-plugins/ask-nemoclaw/ /sandbox/.hermes/plugins/ask-nemoclaw/
+COPY local-plugins/ask-nemoclaw/ /opt/hermes/plugins/ask-nemoclaw/
 COPY local-relay/browser-context-knowledge-assistant/plugins.toml \\
      /etc/nemo-relay/config/plugins.toml
 ADD --checksum=sha256:{RELAY_WHEEL_SHA256} \\
@@ -56,10 +56,9 @@ RUN test "$(dpkg --print-architecture)" = "amd64" \\
     && uv pip check --python /opt/hermes/.venv/bin/python \\
     && rm /tmp/{RELAY_WHEEL_FILENAME} \\
     && mkdir -p /sandbox/.hermes-data/nemo-relay/atif \\
-    && chown -R sandbox:sandbox \\
-       /sandbox/.hermes/plugins/ask-nemoclaw \\
-       /sandbox/.hermes-data/nemo-relay \\
-    && chmod -R a+rX /sandbox/.hermes/plugins/ask-nemoclaw \\
+    && chown -R root:root /opt/hermes/plugins/ask-nemoclaw \\
+    && chmod -R a+rX /opt/hermes/plugins/ask-nemoclaw \\
+    && chown -R sandbox:sandbox /sandbox/.hermes-data/nemo-relay \\
     && mkdir -p /etc/nemoclaw \\
     && printf '1\\n' > /etc/nemoclaw/ask-nemoclaw-loopback-mode \\
     && chown root:root /etc/nemoclaw /etc/nemoclaw/ask-nemoclaw-loopback-mode \\
