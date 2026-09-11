@@ -167,6 +167,18 @@ function setConnectionState(state, label) {
   elements.connectionStatus.textContent = label;
 }
 
+function scrollConversationToBottom() {
+  const scroll = () => globalThis.scrollTo?.({
+    top: document.documentElement.scrollHeight,
+    behavior: "auto"
+  });
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame(scroll);
+  } else {
+    scroll();
+  }
+}
+
 function sanitizePageUrl(rawUrl) {
   const url = new URL(rawUrl || "");
   if (!['http:', 'https:'].includes(url.protocol)) return null;
@@ -696,7 +708,7 @@ function showStatus(status) {
   elements.statusDetail.textContent = detail;
   elements.stopButton.hidden = status === "cancelling";
   elements.status.hidden = false;
-  elements.status.scrollIntoView?.({ block: "end", behavior: "smooth" });
+  scrollConversationToBottom();
 }
 
 function hideStatus() {
@@ -741,7 +753,7 @@ function renderConversationMessages(messages) {
     }
     elements.messages.appendChild(bubble);
   }
-  globalThis.scrollTo?.({ top: document.body.scrollHeight, behavior: "smooth" });
+  scrollConversationToBottom();
 }
 
 async function loadConversation(conversationId, resumePolling = true) {

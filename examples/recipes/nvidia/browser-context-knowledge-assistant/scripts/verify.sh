@@ -10,6 +10,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 node --check "$ROOT/extension/service-worker.js"
 node --check "$ROOT/extension/sidepanel.js"
 bash -n "$ROOT/scripts/check-connection.sh"
+bash -n "$ROOT/scripts/check-brev-host.sh"
+bash -n "$ROOT/scripts/register-brev-gateway.sh"
 bash -n "$ROOT/scripts/onboard.sh"
 bash -n "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
@@ -45,6 +47,19 @@ grep -Fq 'proxy_set_header Host 127.0.0.1:__DASHBOARD_PORT__' "$ROOT/deploy/ngin
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'sudo nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
+grep -Fq 'nemoclaw update --check' "$ROOT/README.md"
+grep -Fq 'Do not replace its binaries' "$ROOT/README.md"
+grep -Fq 'different OpenShell versions' "$ROOT/scripts/check-brev-host.sh"
+grep -Fq 'Refusing to register mismatched OpenShell versions' "$ROOT/scripts/register-brev-gateway.sh"
+if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
+  printf 'README must not recommend replacing Brev-owned OpenShell binaries\n' >&2
+  exit 1
+fi
+grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
+grep -Fq 'one forced inference route' "$ROOT/README.md"
+grep -Fq 'A shorter development path based on `hermes plugins install` is being' "$ROOT/README.md"
+grep -Fq 'version: "0.9.2"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.2"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
