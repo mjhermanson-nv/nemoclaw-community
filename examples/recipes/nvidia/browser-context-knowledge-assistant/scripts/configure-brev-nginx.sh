@@ -12,7 +12,7 @@ PUBLIC_URL="${NEMOCLAW_PUBLIC_URL:-}"
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-ask-nemoclaw}"
 
 if [[ ! "$PUBLIC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
-  printf 'Set NEMOCLAW_PUBLIC_URL to the HTTPS Brev Secure Link origin (no path).\n' >&2
+  printf 'Set NEMOCLAW_PUBLIC_URL to the HTTPS ingress origin (no path).\n' >&2
   exit 2
 fi
 PUBLIC_HOST="${PUBLIC_URL#https://}"
@@ -77,7 +77,7 @@ nemoclaw "$SANDBOX_NAME" exec -- \
   python /opt/hermes/plugins/ask-nemoclaw/configure_dashboard_public_url.py "$PUBLIC_URL"
 nemohermes "$SANDBOX_NAME" stop
 nemohermes "$SANDBOX_NAME" start
-printf 'Configured the Ask NemoClaw Brev proxy on port %s for Hermes port %s.\n' \
+printf 'Configured the Ask NemoClaw reference proxy on port %s for Hermes port %s.\n' \
   "$PROXY_PORT" "$DASHBOARD_PORT"
 printf 'Hermes public URL: %s\n' "$PUBLIC_URL"
 if [[ "$had_config" == true ]]; then

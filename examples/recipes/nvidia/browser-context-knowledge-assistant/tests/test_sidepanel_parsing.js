@@ -38,6 +38,8 @@ assert.match(source, /window\\\.\__HERMES_SESSION_TOKEN__/);
 assert.match(source, /X-Hermes-Session-Token/);
 assert.match(source, /fetch\(nemoClawDashboardUrl/);
 assert.match(source, /sessionAuth\.sessionForRequest/);
+assert.match(source, /\.gobrev\.dev/);
+assert.match(source, /Brev Secure Links use redirect-based browser authentication/);
 assert.match(source, /Authorization/);
 assert.match(source, /forceRefresh: true/);
 assert.match(source, /disconnectNemoClaw/);

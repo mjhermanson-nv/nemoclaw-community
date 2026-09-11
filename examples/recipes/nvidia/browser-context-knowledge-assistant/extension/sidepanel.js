@@ -19,6 +19,15 @@ function normalizedDeploymentUrl(value) {
     return null;
   }
 }
+
+function isBrevSecureLink(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname.endsWith(".gobrev.dev") || hostname.endsWith(".brevlab.com");
+  } catch (_) {
+    return false;
+  }
+}
 const DEFAULT_NEMOCLAW_SERVICE_URL = normalizedDeploymentUrl(`${DEFAULT_NEMOCLAW_ORIGIN}${DEFAULT_SERVICE_PATH}`);
 const DEFAULT_NEMOCLAW_DASHBOARD_URL = normalizedDeploymentUrl(`${DEFAULT_NEMOCLAW_ORIGIN}${DEFAULT_DASHBOARD_PATH}`);
 let nemoClawOrigin = DEFAULT_NEMOCLAW_ORIGIN;
@@ -163,6 +172,11 @@ async function saveSettings(event) {
     return;
   }
   const candidateOrigin = new URL(candidateDashboard).origin;
+  if (isBrevSecureLink(candidateDashboard)) {
+    elements.settingsError.textContent = "Brev Secure Links use redirect-based browser authentication and cannot carry extension API requests. Start a Brev port forward and enter its localhost URL instead.";
+    elements.settingsError.hidden = false;
+    return;
+  }
   const previousOrigin = nemoClawOrigin;
   const granted = await chrome.permissions.request({ origins: [originPermission(candidateOrigin)] });
   if (!granted) {
@@ -1057,6 +1071,17 @@ async function initialize() {
     hideStatus();
     setConnectionState("unavailable", "NemoClaw is not configured");
     showSettings();
+    return;
+  }
+  if (isBrevSecureLink(nemoClawDashboardUrl)) {
+    hideStatus();
+    setConnectionState("unavailable", "Brev Secure Link is incompatible");
+    showError(
+      "Use a localhost Brev port forward",
+      "Brev Secure Links require redirect-based browser authentication that extension API requests cannot complete. Forward the Hermes dashboard port and configure its http://127.0.0.1 URL in Settings.",
+      false,
+      showSettings
+    );
     return;
   }
   try {
