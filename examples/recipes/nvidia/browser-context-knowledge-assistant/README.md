@@ -293,12 +293,13 @@ nemohermes ask-nemoclaw dashboard-url --quiet
 For a shared Hermes deployment, place Hermes behind the platform's authenticated
 TLS ingress. Do not publish an unauthenticated Hermes port.
 
-The NemoClaw Brev launchable already uses Nginx on port 80 behind an
-authenticated Brev Secure Link. Keep that server. The configuration helper:
+The NemoClaw Brev launchable already uses Nginx on port 80 for its management
+interface. Keep that server unchanged. Hermes and the Brev interface both use
+absolute `/api/...` paths, so they cannot reliably share one hostname. The
+configuration helper creates a separate Nginx listener on port `18889` that:
 
-- preserves the Brev management interface at `/dashboard`;
-- routes `/` to the Hermes dashboard;
-- routes `/ask-nemoclaw/` to the plugin API; and
+- routes the complete Secure Link hostname to the Hermes dashboard and plugin;
+- preserves the Brev management interface on its existing hostname; and
 - rewrites only the upstream Host and Origin values that Hermes validates.
 
 Run the helper after the sandbox reports Ready:
@@ -308,13 +309,12 @@ sudo -v
 bash scripts/configure-brev-nginx.sh
 ```
 
-In the Brev **Access** page, create or edit the HTTP Secure Link so its
-**Destination Port** is `80`. Do not point the Secure Link directly at the
-Hermes dashboard port (`18789`, `18790`, or another selected port). Port `80`
-is the authenticated Brev Nginx entry point; it supplies the loopback Host and
-Origin values expected by the single-user Hermes dashboard. Direct exposure of
-the Hermes port causes the **Sign-in unavailable** page because Hermes requires
-its own authentication provider for a non-loopback host.
+In the Brev **Access** page, create a second HTTP Secure Link with
+**Destination Port** `18889`. Use this new hostname for the extension. Do not
+point the Secure Link directly at the Hermes dashboard port (`18789`, `18790`,
+or another selected port). Direct exposure of the Hermes port causes the
+**Sign-in unavailable** page because Hermes requires its own authentication
+provider for a non-loopback host.
 
 The default dashboard port is `18789`. If NemoClaw selected another port, pass
 it explicitly:
@@ -323,19 +323,22 @@ it explicitly:
 NEMOCLAW_DASHBOARD_PORT=18790 bash scripts/configure-brev-nginx.sh
 ```
 
-The helper installs `deploy/nginx/ask-nemoclaw-location.conf` as the following
-include inside the existing authenticated Brev Nginx `server` block:
+Port `18889` can also be changed if it is already occupied:
 
-```nginx
-include /etc/nginx/snippets/ask-nemoclaw-location.conf;
+```bash
+NEMOCLAW_DASHBOARD_PORT=18790 \
+NEMOCLAW_BREV_PROXY_PORT=18890 \
+  bash scripts/configure-brev-nginx.sh
 ```
 
-It creates timestamped backups, validates the complete Nginx configuration,
-and reloads Nginx only after validation succeeds. Confirm both retained routes:
+The helper installs `deploy/nginx/ask-nemoclaw-server.conf` as a dedicated
+Nginx server, creates timestamped backups, validates the complete Nginx
+configuration, and reloads Nginx only after validation succeeds. Confirm both
+separate Secure Links:
 
 ```text
-https://<brev-secure-link>/            Hermes dashboard
-https://<brev-secure-link>/dashboard  Brev management dashboard
+https://<ask-nemoclaw-secure-link>/  Hermes dashboard and plugin API
+https://<original-secure-link>/      Brev management dashboard
 ```
 
 This adapter relies on the prepared image's loopback development mode and the
@@ -492,7 +495,7 @@ For a live verification:
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay configuration, and managed enablement to the complete Hermes image source. |
 | `scripts/onboard.sh` | Builds and onboards the custom Hermes sandbox. |
 | `scripts/build-extension.sh` | Produces an unpacked extension for one exact Hermes origin. |
-| `deploy/nginx/ask-nemoclaw-location.conf` | Optional narrow path adapter for a single-user authenticated Brev Secure Link. |
+| `deploy/nginx/ask-nemoclaw-server.conf` | Dedicated proxy for a single-user authenticated Ask NemoClaw Brev Secure Link. |
 | `scripts/check-connection.sh` | Checks the dashboard and plugin routes without credentials. |
 | `scripts/verify.sh` | Runs static and local tests. |
 | `tests/` | Python API and JavaScript rendering tests with synthetic data. |
