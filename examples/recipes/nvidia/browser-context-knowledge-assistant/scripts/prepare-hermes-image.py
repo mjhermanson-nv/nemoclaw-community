@@ -17,7 +17,7 @@ END_MARKER = "# END browser-context-knowledge-assistant"
 ANCHOR = "# Verify the immutable security package inventory in the completed image."
 MANAGED_POLICY_BEFORE = '      enabled: ["nemoclaw"],'
 MANAGED_POLICY_AFTER = (
-    '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"],'
+    '      enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay", "dashboard_auth/basic"],'
 )
 ROUTING_KEYS_BEFORE = '  "_nemoclaw_upstream",\n] as const;'
 ROUTING_KEYS_AFTER = (

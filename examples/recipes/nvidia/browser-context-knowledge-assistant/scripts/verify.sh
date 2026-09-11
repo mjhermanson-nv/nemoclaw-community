@@ -31,6 +31,7 @@ if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/n
 fi
 node "$ROOT/tests/test_sidepanel_parsing.js"
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
+"$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
 "$PYTHON_BIN" "$ROOT/scripts/configure-extension.py" \
   --output "$ROOT/build/portable-verification-extension"
@@ -55,9 +56,12 @@ test -s "$ROOT/build/loopback-verification-extension/manifest.json"
 grep -Fq 'servicePath: "/ask-nemoclaw"' "$ROOT/build/brev-verification-extension/config.js"
 grep -Fq 'dashboardPath: "/"' "$ROOT/build/brev-verification-extension/config.js"
 grep -Fq 'listen 0.0.0.0:__PROXY_PORT__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
-grep -Fq 'proxy_set_header Host 127.0.0.1:__DASHBOARD_PORT__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
+grep -Fq 'server_name __PUBLIC_HOST__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
+grep -Fq 'proxy_set_header Host __PUBLIC_HOST__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
+grep -Fq 'proxy_set_header Origin __PUBLIC_URL__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
+grep -Fq 'NEMOCLAW_PUBLIC_URL' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'sudo -n nginx -t' "$ROOT/scripts/configure-brev-nginx.sh"
 if grep -Eq 'sudo[[:space:]]+(ss|test|cp|install|nginx|rm|systemctl)' \
   "$ROOT/scripts/configure-brev-nginx.sh" "$ROOT/scripts/prepare-brev-gateway.sh"; then
@@ -79,8 +83,8 @@ fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'one forced inference route' "$ROOT/README.md"
 grep -Fq 'A shorter development path based on `hermes plugins install` is being' "$ROOT/README.md"
-grep -Fq 'version: "0.9.2"' "$ROOT/hermes-plugin/plugin.yaml"
-grep -Fq '"version": "0.9.2"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq 'version: "0.9.3"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.3"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
@@ -116,6 +120,7 @@ printf '%s\n' \
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
 test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_auth.py"
+test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_public_url.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
 grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1
@@ -135,7 +140,7 @@ grep -Fq 'HERMES_ASK_NEMOCLAW_LOOPBACK_MODE=1' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq '/etc/nemoclaw/ask-nemoclaw-loopback-mode' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay"]' \
+grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay", "dashboard_auth/basic"]' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 grep -Fq '"plugins",' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"

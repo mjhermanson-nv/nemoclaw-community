@@ -8,6 +8,14 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DASHBOARD_PORT="${NEMOCLAW_DASHBOARD_PORT:-18789}"
 PROXY_PORT="${NEMOCLAW_BREV_PROXY_PORT:-18889}"
 NGINX_CONFIG="${NEMOCLAW_BREV_NGINX_CONFIG:-/etc/nginx/conf.d/ask-nemoclaw-dashboard.conf}"
+PUBLIC_URL="${NEMOCLAW_PUBLIC_URL:-}"
+SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-ask-nemoclaw}"
+
+if [[ ! "$PUBLIC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+  printf 'Set NEMOCLAW_PUBLIC_URL to the HTTPS Brev Secure Link origin (no path).\n' >&2
+  exit 2
+fi
+PUBLIC_HOST="${PUBLIC_URL#https://}"
 
 for value_name in DASHBOARD_PORT PROXY_PORT; do
   value="${!value_name}"
@@ -47,6 +55,8 @@ trap 'rm -rf -- "$tmp_dir"' EXIT
 sed \
   -e "s/__DASHBOARD_PORT__/${DASHBOARD_PORT}/g" \
   -e "s/__PROXY_PORT__/${PROXY_PORT}/g" \
+  -e "s/__PUBLIC_HOST__/${PUBLIC_HOST}/g" \
+  -e "s|__PUBLIC_URL__|${PUBLIC_URL}|g" \
   "$ROOT/deploy/nginx/ask-nemoclaw-server.conf" \
   > "$tmp_dir/ask-nemoclaw-dashboard.conf"
 sudo -n install -o root -g root -m 0644 \
@@ -63,9 +73,13 @@ if ! sudo -n nginx -t; then
 fi
 
 sudo -n systemctl reload nginx
+nemoclaw "$SANDBOX_NAME" exec -- \
+  python /opt/hermes/plugins/ask-nemoclaw/configure_dashboard_public_url.py "$PUBLIC_URL"
+nemohermes "$SANDBOX_NAME" stop
+nemohermes "$SANDBOX_NAME" start
 printf 'Configured the Ask NemoClaw Brev proxy on port %s for Hermes port %s.\n' \
   "$PROXY_PORT" "$DASHBOARD_PORT"
-printf 'Create a separate Brev HTTP Secure Link with destination port %s.\n' "$PROXY_PORT"
+printf 'Hermes public URL: %s\n' "$PUBLIC_URL"
 if [[ "$had_config" == true ]]; then
   printf 'Config backup: %s\n' "$config_backup"
 fi

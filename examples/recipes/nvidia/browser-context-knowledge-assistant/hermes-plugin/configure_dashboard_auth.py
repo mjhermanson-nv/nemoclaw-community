@@ -13,10 +13,11 @@ import secrets
 import subprocess
 import tempfile
 
+import yaml
 from plugins.dashboard_auth.basic import hash_password
 
 
-MANAGED_KEYS = {
+LEGACY_ENV_KEYS = {
     "HERMES_DASHBOARD_BASIC_AUTH_USERNAME",
     "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD",
     "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH",
@@ -24,23 +25,30 @@ MANAGED_KEYS = {
 }
 
 
-def hermes_env_path() -> Path:
+def hermes_path(command: str) -> Path:
     result = subprocess.run(
-        ["hermes", "config", "env-path"],
+        ["hermes", "config", command],
         check=True,
         capture_output=True,
         text=True,
     )
     path = result.stdout.strip()
     if not path:
-        raise SystemExit("Hermes did not return its environment-file path")
+        raise SystemExit(f"Hermes did not return its {command!r} path")
     return Path(path)
+
+
+def dashboard_config_path() -> Path:
+    configured = os.environ.get("HERMES_DASHBOARD_HOME", "").strip()
+    if configured:
+        return Path(configured) / "config.yaml"
+    return hermes_path("path").parent / "profiles" / "dashboard-home" / "config.yaml"
 
 
 def prompt_username() -> str:
     username = input("Dashboard username [admin]: ").strip() or "admin"
-    if not username or len(username) > 128 or "=" in username or "\n" in username:
-        raise SystemExit("Username must be 1-128 characters and cannot contain '='")
+    if not username or len(username) > 128 or "\n" in username:
+        raise SystemExit("Username must be 1-128 characters")
     return username
 
 
@@ -54,25 +62,19 @@ def prompt_password() -> str:
     return password
 
 
-def replace_managed_entries(path: Path, values: dict[str, str]) -> None:
+def atomic_write(path: Path, content: str, default_mode: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    retained = [
-        line
-        for line in existing
-        if line.split("=", 1)[0].strip() not in MANAGED_KEYS
-    ]
-    updated = retained + [f"{key}={value}" for key, value in values.items()]
-
+    existing = path.stat() if path.exists() else None
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", dir=path.parent, text=True
     )
     try:
-        os.fchmod(descriptor, 0o600)
+        os.fchmod(descriptor, default_mode)
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write("\n".join(updated) + "\n")
+            stream.write(content)
+        if existing is not None:
+            os.chown(temporary_name, existing.st_uid, existing.st_gid)
         os.replace(temporary_name, path)
-        os.chmod(path, 0o600)
     except BaseException:
         try:
             os.unlink(temporary_name)
@@ -81,24 +83,68 @@ def replace_managed_entries(path: Path, values: dict[str, str]) -> None:
         raise
 
 
+def write_basic_auth_config(
+    path: Path, *, username: str, password_hash: str, signing_secret: str
+) -> None:
+    config = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    if config is None:
+        config = {}
+    if not isinstance(config, dict):
+        raise SystemExit("Hermes config root must be a mapping")
+    dashboard = config.setdefault("dashboard", {})
+    if not isinstance(dashboard, dict):
+        raise SystemExit("Hermes dashboard config must be a mapping")
+    dashboard["basic_auth"] = {
+        "username": username,
+        "password_hash": password_hash,
+        "secret": signing_secret,
+    }
+    plugins = config.setdefault("plugins", {})
+    if not isinstance(plugins, dict):
+        raise SystemExit("Hermes plugins config must be a mapping")
+    enabled = plugins.get("enabled")
+    if enabled is None:
+        enabled = []
+    if not isinstance(enabled, list) or not all(isinstance(item, str) for item in enabled):
+        raise SystemExit("Hermes plugins.enabled config must be a string list")
+    if "dashboard_auth/basic" not in enabled:
+        enabled.append("dashboard_auth/basic")
+    plugins["enabled"] = enabled
+    atomic_write(
+        path,
+        yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
+        default_mode=0o640,
+    )
+
+
+def remove_legacy_env_entries(path: Path) -> None:
+    if not path.exists():
+        return
+    retained = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key = line.split("=", 1)[0].removeprefix("export ").strip()
+        if key not in LEGACY_ENV_KEYS:
+            retained.append(line)
+    atomic_write(path, "\n".join(retained) + "\n", default_mode=0o640)
+
+
 def main() -> None:
     username = prompt_username()
     password = prompt_password()
     password_hash = hash_password(password)
     password = ""
 
-    path = hermes_env_path()
-    replace_managed_entries(
-        path,
-        {
-            "HERMES_DASHBOARD_BASIC_AUTH_USERNAME": username,
-            "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH": password_hash,
-            "HERMES_DASHBOARD_BASIC_AUTH_SECRET": secrets.token_urlsafe(48),
-        },
+    write_basic_auth_config(
+        dashboard_config_path(),
+        username=username,
+        password_hash=password_hash,
+        signing_secret=secrets.token_urlsafe(48),
     )
-    print(f"Dashboard authentication configured in {path}.")
+    remove_legacy_env_entries(hermes_path("env-path"))
+
+    print("Dashboard authentication configured in the isolated dashboard profile.")
     print("Only a scrypt password hash and a random session-signing secret were stored.")
-    print("Exit the sandbox shell, then restart the Hermes gateway from the Brev host.")
+    print("Exit the sandbox shell, then stop and start the sandbox from the Brev host.")
 
 
 if __name__ == "__main__":
