@@ -231,8 +231,12 @@ curl -fsSL https://www.nvidia.com/nemoclaw.sh \
 ```
 
 Review and explicitly accept the third-party software terms. Do not automate
-that acceptance for another user. When the updated installer reaches inference
-provider selection, cancel it before entering a credential. The example must
+that acceptance for another user. The installer may then attempt its standard
+onboarding flow. Do not enter an inference credential or create a sandbox yet;
+cancel at the first onboarding prompt. On launchable revisions with the legacy
+gateway declaration, onboarding can instead stop by itself with
+`Invalid gateway management declaration`. That message does not mean the CLI
+upgrade failed. Continue with the gateway handoff below. The example must
 prepare the Hermes image before onboarding creates the only sandbox.
 
 Refresh the shell command path after the installer. The maintained installation
