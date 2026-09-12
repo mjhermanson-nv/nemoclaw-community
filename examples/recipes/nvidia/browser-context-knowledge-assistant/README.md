@@ -360,6 +360,20 @@ Enter `http://127.0.0.1:18789` in the extension settings. No Hermes login is
 required in this loopback development mode. The extension should immediately
 create its first conversation. The port-forward command must continue running.
 
+Before opening Chrome, verify that both the tunnel and login-free backend mode
+are active:
+
+```bash
+bash scripts/check-connection.sh http://127.0.0.1:18789
+```
+
+The final two lines must report HTTP 200 for the Ask NemoClaw API and
+`Loopback development connection is ready`. If the check reports that Hermes
+requires authentication, the sandbox was configured for a shared deployment
+or was built before the loopback marker was added. Do not treat that as a
+port-forward failure; recreate the development sandbox from the current recipe
+if its existing conversations do not need to be retained.
+
 If local port `18789` is already occupied, map another local port to the remote
 dashboard port, for example:
 
@@ -469,15 +483,17 @@ python3 -m venv .venv
 PYTHON_BIN=.venv/bin/python bash scripts/verify.sh
 ```
 
-An operator can also check the unauthenticated route without sending a password
-or session cookie:
+An operator can also check a route without sending a password or session
+cookie:
 
 ```bash
 bash scripts/check-connection.sh https://hermes.example.com
 ```
 
 HTTP 302, 401, or 403 can be the expected authentication boundary. The Chrome
-side panel performs the final check with the user's normal Hermes session.
+side panel performs the final check with the user's normal Hermes session. For
+an HTTP loopback origin, the script is stricter: Hermes must report that
+authentication is disabled and the Ask NemoClaw API must return HTTP 200.
 
 Expected evidence:
 
