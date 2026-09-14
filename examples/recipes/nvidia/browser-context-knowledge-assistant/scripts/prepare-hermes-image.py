@@ -121,6 +121,13 @@ def main() -> None:
 
     text = dockerfile.read_text(encoding="utf-8")
     policy_text = plugin_config.read_text(encoding="utf-8")
+    destinations = (
+        (PLUGIN_SOURCE, source / "local-plugins" / "ask-nemoclaw"),
+        (
+            RELAY_SOURCE,
+            source / "local-relay" / "browser-context-knowledge-assistant",
+        ),
+    )
     if (BEGIN_MARKER in text) != (END_MARKER in text):
         raise SystemExit(
             "The managed example layer is incomplete; restore a clean Hermes "
@@ -141,6 +148,11 @@ def main() -> None:
             print(f"Updated managed plugin configuration: {plugin_config}")
         else:
             print(f"Managed plugin configuration is current: {plugin_config}")
+        for origin, destination in destinations:
+            if destination.exists() and not destination.is_dir():
+                raise SystemExit(f"Managed recipe path is not a directory: {destination}")
+            shutil.copytree(origin, destination, dirs_exist_ok=True)
+            print(f"Refreshed managed recipe payload: {destination}")
         return
     if ANCHOR not in text:
         raise SystemExit(
@@ -150,13 +162,6 @@ def main() -> None:
 
     updated_policy = update_managed_policy(policy_text)
 
-    destinations = (
-        (PLUGIN_SOURCE, source / "local-plugins" / "ask-nemoclaw"),
-        (
-            RELAY_SOURCE,
-            source / "local-relay" / "browser-context-knowledge-assistant",
-        ),
-    )
     for _, destination in destinations:
         if destination.exists():
             raise SystemExit(
