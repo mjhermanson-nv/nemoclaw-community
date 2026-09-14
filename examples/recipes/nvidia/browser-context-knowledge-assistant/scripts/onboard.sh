@@ -97,6 +97,9 @@ if [[ ! -r "$HERMES_DOCKERFILE" ]]; then
   exit 1
 fi
 RECREATE_REQUESTED=0
+RESUME_REQUESTED=0
+FRESH_REQUESTED=0
+ONBOARD_ARGS=()
 for argument in "$@"; do
   case "$argument" in
     --from|--from=*)
@@ -106,18 +109,34 @@ for argument in "$@"; do
     --recreate-sandbox)
       RECREATE_REQUESTED=1
       ;;
+    --resume)
+      RESUME_REQUESTED=1
+      ONBOARD_ARGS+=("$argument")
+      ;;
+    --fresh)
+      FRESH_REQUESTED=1
+      ONBOARD_ARGS+=("$argument")
+      ;;
+    *)
+      ONBOARD_ARGS+=("$argument")
+      ;;
   esac
 done
+
+if ((RECREATE_REQUESTED == 1 && RESUME_REQUESTED == 1)); then
+  printf '%s\n' '--recreate-sandbox starts a clean onboarding session; do not combine it with --resume.' >&2
+  exit 2
+fi
 
 printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
 printf 'NemoHermes command: %s\n' "$NEMOHERMES_BIN"
 
-# Recreating a running Hermes sandbox must retire orphaned host-side service
-# forwards before onboarding binds replacements. Keep the sandbox itself
-# running: NemoHermes needs the live workspace to make its automatic backup.
-# Match the resolved OpenShell executable, exact sandbox argument, and loopback
-# endpoints before signalling a process. Ordinary onboarding never does this.
+# Recreating a Hermes sandbox is an explicitly destructive clean replacement
+# for this example. Retire orphaned host-side service forwards before removing
+# the sandbox so the new instance can bind the same ports. Match the resolved
+# OpenShell executable, exact sandbox argument, and loopback endpoints before
+# signalling a process. Ordinary onboarding never does this.
 if ((RECREATE_REQUESTED == 1)); then
   mapfile -t STALE_FORWARD_PIDS < <(python3 - "$SANDBOX_NAME" "$OPENSHELL_BIN" <<'PY'
 import os
@@ -174,6 +193,34 @@ PY
       exit 1
     fi
   fi
+
+  REGISTRY_HAS_SANDBOX="$(python3 - "$HOME/.nemoclaw/sandboxes.json" "$SANDBOX_NAME" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+name = sys.argv[2]
+try:
+    document = json.loads(path.read_text(encoding="utf-8"))
+except (FileNotFoundError, json.JSONDecodeError, OSError):
+    print("0")
+else:
+    print("1" if name in document.get("sandboxes", {}) else "0")
+PY
+  )"
+  LIVE_SANDBOX=0
+  if "$OPENSHELL_BIN" sandbox get "$SANDBOX_NAME" >/dev/null 2>&1; then
+    LIVE_SANDBOX=1
+  fi
+  if [[ "$REGISTRY_HAS_SANDBOX" == 1 || "$LIVE_SANDBOX" == 1 ]]; then
+    printf "Removing existing example sandbox '%s' for a clean replacement...\n" \
+      "$SANDBOX_NAME"
+    "$NEMOHERMES_BIN" "$SANDBOX_NAME" destroy -y
+  fi
+  if ((FRESH_REQUESTED == 0)); then
+    ONBOARD_ARGS+=(--fresh)
+  fi
 fi
 
 # This exact repository-owned path is recognized as the trusted Hermes
@@ -183,4 +230,4 @@ fi
 "$NEMOHERMES_BIN" onboard \
   --name "$SANDBOX_NAME" \
   --from "$HERMES_DOCKERFILE" \
-  "$@"
+  "${ONBOARD_ARGS[@]}"

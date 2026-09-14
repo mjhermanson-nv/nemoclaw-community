@@ -327,10 +327,20 @@ auxiliary-vision dialog does not change OpenShell's enforced route.
 
 Provider and model environment variables supply onboarding defaults. In
 interactive mode, NemoHermes still displays those choices for confirmation;
-this does not mean that the variables were ignored. A later explicit
-`--recreate-sandbox` run releases only verified OpenShell service-forward
-processes for that sandbox while leaving the sandbox running long enough for
-NemoHermes to make its automatic state backup.
+this does not mean that the variables were ignored.
+
+To discard this example sandbox and build it again from a clean state, use the
+explicit recreation flag:
+
+```bash
+bash scripts/onboard.sh --recreate-sandbox
+```
+
+This removes the existing example sandbox, including its conversations and
+workspace state, clears its lifecycle registration, and starts a fresh
+onboarding session. It also releases only the verified OpenShell service
+forwards belonging to that sandbox. Normal runs without
+`--recreate-sandbox` remain non-destructive.
 
 The default sandbox name is `ask-nemoclaw`. To use another name of 19 or fewer
 characters:

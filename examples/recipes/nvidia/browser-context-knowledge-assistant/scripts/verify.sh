@@ -29,6 +29,10 @@ grep -Fq 'HERMES_DOCKERFILE="$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"' "$ROOT/
 grep -Fq -- '--from "$HERMES_DOCKERFILE"' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Omitting --from selects the stock managed' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Releasing %d existing Ask NemoClaw host forward(s) before recreation' "$ROOT/scripts/onboard.sh"
+grep -Fq 'Removing existing example sandbox' "$ROOT/scripts/onboard.sh"
+grep -Fq '"$NEMOHERMES_BIN" "$SANDBOX_NAME" destroy -y' "$ROOT/scripts/onboard.sh"
+grep -Fq 'ONBOARD_ARGS+=(--fresh)' "$ROOT/scripts/onboard.sh"
+grep -Fq 'Normal runs without' "$ROOT/README.md"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
   printf 'connection checker accepted a URL path instead of an exact origin\n' >&2
   exit 1
