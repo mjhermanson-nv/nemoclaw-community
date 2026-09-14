@@ -4,7 +4,7 @@
 """Authenticated Ask NemoClaw API for browser-context prompts.
 
 The plugin intentionally uses the existing in-process JSON-RPC dispatcher.
-Each prompt receives a new Hermes session and never allocates a PTY.
+Each browser conversation receives a persisted Hermes session and never allocates a PTY.
 Loopback-only developer deployments may explicitly use one local owner because
 Hermes does not create an application session for its loopback dashboard.
 """
@@ -580,6 +580,57 @@ def _stored_message_high_water(stored_session_id: str) -> int:
     return int(row[0] or 0) if row else 0
 
 
+def _hermes_session_profile() -> str | None:
+    """Return the named Hermes profile that owns this plugin's state database."""
+
+    hermes_home = _conversation_database_path().parent
+    if hermes_home.parent.name != "profiles":
+        return None
+    profile = hermes_home.name.strip()
+    return profile if re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", profile) else None
+
+
+def _ensure_hermes_session_profiles(
+    stored_session_ids: list[str], profile: str | None
+) -> None:
+    """Backfill ownership for Ask NemoClaw rows created by older Hermes releases."""
+
+    session_ids = [session_id for session_id in stored_session_ids if session_id]
+    if not session_ids or not profile:
+        return
+    database = _conversation_database_path().parent / "state.db"
+    if not database.is_file():
+        return
+    try:
+        from hermes_state import SessionDB
+
+        session_db = SessionDB(db_path=database)
+        try:
+            for stored_session_id in session_ids:
+                row = session_db.get_session(stored_session_id)
+                if not row or str(row.get("source") or "") != "ask-nemoclaw-conversation":
+                    continue
+                if str(row.get("profile_name") or "").strip():
+                    continue
+                # Hermes uses a COALESCE-only upsert here: this fills the missing
+                # owner without replacing transcript, model, source, or routing data.
+                session_db.create_session(
+                    stored_session_id,
+                    source="ask-nemoclaw-conversation",
+                    profile_name=profile,
+                )
+        finally:
+            session_db.close()
+    except Exception:
+        # Dashboard visibility is metadata repair. It must not discard an
+        # otherwise successful agent response on older Hermes installations.
+        return
+
+
+def _ensure_hermes_session_profile(stored_session_id: str, profile: str | None) -> None:
+    _ensure_hermes_session_profiles([stored_session_id], profile)
+
+
 def _stored_assistant_completion(stored_session_id: str, after_message_id: int = 0) -> str | None:
     if not stored_session_id:
         return None
@@ -674,6 +725,7 @@ def _run_hermes_prompt(
     transport = CaptureTransport()
     session_id = ""
     bound_stored_session_id = stored_session_id or ""
+    session_profile = _hermes_session_profile()
     attached_image_path: Path | None = None
     try:
         method = "session.resume" if bound_stored_session_id else "session.create"
@@ -681,6 +733,8 @@ def _run_hermes_prompt(
             "source": session_source,
             "close_on_disconnect": True,
         }
+        if session_profile:
+            params["profile"] = session_profile
         if bound_stored_session_id:
             params["session_id"] = bound_stored_session_id
         else:
@@ -834,6 +888,7 @@ def _run_hermes_prompt(
                 )
             except Exception:
                 pass
+        _ensure_hermes_session_profile(bound_stored_session_id, session_profile)
         if bound_stored_session_id and cleanup_session_resources:
             try:
                 from tools.terminal_tool import cleanup_vm
@@ -1025,7 +1080,7 @@ def _conversation_worker(job_id: str) -> None:
             result, resolved_stored_id = _run_hermes_prompt(
                 _build_conversation_prompt(turn),
                 session_source="ask-nemoclaw-conversation",
-                session_title="Ask NemoClaw conversation",
+                session_title=str(conversation["title"] or "Ask NemoClaw conversation"),
                 stored_session_id=stored_session_id,
                 job_id=job_id,
                 on_session_bound=lambda session_id: _bind_conversation_session(
@@ -1165,6 +1220,13 @@ async def list_conversations(request: Request):
             (owner_key, _MAX_RECENT_CONVERSATIONS),
         ).fetchall()
         body = [_public_conversation(connection, row) for row in rows]
+    # Repair only sessions mapped to this authenticated owner's visible
+    # conversations. Hermes releases before the profile-ownership fix could
+    # persist these transcripts with a NULL profile, hiding them from Sessions.
+    profile = _hermes_session_profile()
+    _ensure_hermes_session_profiles(
+        [str(row["hermes_session_id"] or "") for row in rows], profile
+    )
     return JSONResponse(content={"conversations": body}, headers={"Cache-Control": "no-store"})
 
 

@@ -167,6 +167,8 @@ class PluginApiTests(unittest.TestCase):
             )
         self.assertEqual(result["text"], "I can see the rendered viewport.")
         self.assertEqual(stored_session, "stored-session")
+        create = next(params for method, params in calls if method == "session.create")
+        self.assertNotIn("profile", create)
         attach = next(params for method, params in calls if method == "image.attach_bytes")
         submit = next(params for method, params in calls if method == "prompt.submit")
         self.assertEqual(attach["session_id"], "live-session")
@@ -181,6 +183,108 @@ class PluginApiTests(unittest.TestCase):
         self.assertEqual(
             module._parse_agent_response(raw),
             {"format": "text", "text": raw},
+        )
+
+    def test_named_profile_is_sent_to_hermes_and_missing_owner_is_backfilled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile_home = Path(directory) / "profiles" / "dashboard-home"
+            profile_home.mkdir(parents=True)
+            conversation_database = profile_home / "ask-nemoclaw-conversations.db"
+            state_database = profile_home / "state.db"
+            state_database.touch()
+            calls = []
+            created = []
+
+            class FakeSessionDB:
+                def __init__(self, db_path):
+                    self.db_path = db_path
+
+                def get_session(self, session_id):
+                    return {
+                        "id": session_id,
+                        "source": "ask-nemoclaw-conversation",
+                        "profile_name": None,
+                    }
+
+                def create_session(self, session_id, **kwargs):
+                    created.append((session_id, kwargs))
+
+                def close(self):
+                    return None
+
+            ready = threading.Event()
+            ready.set()
+
+            class FakeLock:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_):
+                    return False
+
+            class FakeGateway:
+                _sessions_lock = FakeLock()
+                _sessions = {
+                    "live-session": {
+                        "agent_ready": ready,
+                        "agent": object(),
+                        "agent_error": None,
+                    }
+                }
+
+                @staticmethod
+                def dispatch(request, transport):
+                    calls.append((request["method"], dict(request.get("params") or {})))
+                    if request["method"] == "session.create":
+                        return {
+                            "result": {
+                                "session_id": "live-session",
+                                "stored_session_id": "stored-session",
+                            }
+                        }
+                    if request["method"] == "prompt.submit":
+                        transport.write(
+                            {
+                                "method": "event",
+                                "params": {
+                                    "type": "message.complete",
+                                    "payload": {"text": "Completed"},
+                                },
+                            }
+                        )
+                    return {"result": {"accepted": True}}
+
+            with mock.patch.dict(
+                os.environ,
+                {"HERMES_ASK_NEMOCLAW_DB": str(conversation_database)},
+            ), mock.patch.dict(
+                sys.modules,
+                {
+                    "tui_gateway": SimpleNamespace(server=FakeGateway),
+                    "hermes_state": SimpleNamespace(SessionDB=FakeSessionDB),
+                },
+            ):
+                result, stored_session = module._run_hermes_prompt(
+                    "Summarize this page.",
+                    session_source="ask-nemoclaw-conversation",
+                    session_title="Example page",
+                )
+
+        create = next(params for method, params in calls if method == "session.create")
+        self.assertEqual(create["profile"], "dashboard-home")
+        self.assertEqual(result["text"], "Completed")
+        self.assertEqual(stored_session, "stored-session")
+        self.assertEqual(
+            created,
+            [
+                (
+                    "stored-session",
+                    {
+                        "source": "ask-nemoclaw-conversation",
+                        "profile_name": "dashboard-home",
+                    },
+                )
+            ],
         )
 
     def test_plugin_has_no_domain_specific_skill_routing(self):
@@ -413,7 +517,9 @@ class ConversationApiTests(unittest.TestCase):
         calls = []
 
         def run_prompt(prompt, **kwargs):
-            calls.append((prompt, kwargs.get("stored_session_id")))
+            calls.append(
+                (prompt, kwargs.get("stored_session_id"), kwargs.get("session_title"))
+            )
             number = len(calls)
             session_id = kwargs.get("stored_session_id") or f"stored-{number}"
             kwargs["on_session_bound"](session_id)
@@ -431,6 +537,8 @@ class ConversationApiTests(unittest.TestCase):
         self.assertIsNone(calls[2][1])
         self.assertIn("matches the context supplied in the previous turn", calls[1][0])
         self.assertNotIn("page version one", calls[1][0])
+        self.assertEqual(calls[0][2], "Example page")
+        self.assertEqual(calls[2][2], "Other page")
 
     def test_changed_context_is_sent_and_persisted_history_survives_store_reopen(self):
         conversation_id = self.create_conversation()
@@ -504,6 +612,28 @@ class ConversationApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as missing_context:
             self.send(conversation_id, "Question", "", "g" * 24)
         self.assertEqual(missing_context.exception.status_code, 400)
+
+    def test_listing_repairs_only_the_owners_bound_sessions(self):
+        conversation_id = self.create_conversation(owner="owner-a")
+        with module._conversation_connection() as connection:
+            connection.execute(
+                "UPDATE conversations SET hermes_session_id = ? WHERE conversation_id = ?",
+                ("stored-owner-a", conversation_id),
+            )
+        repairs = []
+        with mock.patch.object(
+            module, "_hermes_session_profile", return_value="dashboard-home"
+        ), mock.patch.object(
+            module,
+            "_ensure_hermes_session_profiles",
+            side_effect=lambda session_ids, profile: repairs.append((session_ids, profile)),
+        ):
+            response = asyncio.run(
+                module.list_conversations(_FakeRequest(owner="owner-a"))
+            )
+
+        self.assertEqual(len(_response_json(response)["conversations"]), 1)
+        self.assertEqual(repairs, [(["stored-owner-a"], "dashboard-home")])
 
     def test_root_owned_loopback_marker_enables_local_owner(self):
         marker_metadata = SimpleNamespace(

@@ -60,6 +60,8 @@ extension. Ask NemoClaw sends the prompt and bounded browser context to one
 user-configured Hermes origin. The plugin maps each browser conversation to a
 separate non-PTY Hermes session. Hermes selects installed skills and tools,
 OpenShell applies runtime controls, and NeMo Relay records local ATIF traces.
+The session is stored in Hermes's normal profile-backed session database, so it
+also appears in the Hermes dashboard without allocating a terminal or PTY.
 
 The Chrome extension can reach only an origin granted through Chrome host
 permissions. The Brev quick start uses an authenticated Brev CLI port forward
@@ -127,6 +129,7 @@ The base recipe:
 - isolates conversations by the authenticated Hermes user;
 - creates a separate Hermes session for every new side-panel conversation;
 - reuses that session only for later messages in the same conversation;
+- lists completed extension conversations in the owning Hermes dashboard profile;
 - never allocates a terminal or PTY; and
 - performs no page writes and adds no external egress policy.
 
@@ -552,10 +555,12 @@ For a live verification:
 5. Send a follow-up question and confirm it retains the conversation.
 6. Select **New**, ask another question, and confirm it does not inherit the
    earlier conversation.
-7. Change tabs, select the toolbar icon on the new tab, select **Refresh**, and
+7. Open Hermes **Sessions** and confirm both extension conversations appear
+   under the active profile with their browser conversation titles.
+8. Change tabs, select the toolbar icon on the new tab, select **Refresh**, and
    confirm a new conversation starts with the new page context.
-8. Inspect the OpenShell policy and confirm this recipe added no external host.
-9. In the sandbox, list `/sandbox/.hermes-data/nemo-relay/atif` and confirm a
+9. Inspect the OpenShell policy and confirm this recipe added no external host.
+10. In the sandbox, list `/sandbox/.hermes-data/nemo-relay/atif` and confirm a
    new JSON file was created for the review session. Inspect only its schema or
    field names if the page content is sensitive.
 
