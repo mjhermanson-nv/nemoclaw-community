@@ -115,7 +115,8 @@ The base recipe:
   explicitly enables loopback mode through its environment or a root-owned,
   read-only marker and the request host is loopback;
 - verifies the browser origin;
-- strips URL credentials, fragments, and query parameters for every site;
+- strips URL credentials and fragments, preserves ordinary query parameters
+  needed to identify the page, and removes credential-like query parameters;
 - limits request and response sizes;
 - accepts only a bounded, browser-generated JPEG viewport image;
 - permits viewport-only context when a canvas-based or otherwise rendered page

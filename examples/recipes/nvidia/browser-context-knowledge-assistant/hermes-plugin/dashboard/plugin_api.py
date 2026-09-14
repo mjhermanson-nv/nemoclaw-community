@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -66,6 +66,11 @@ _CONVERSATION_ACTIVE_STATES = frozenset({"queued", "prompting", "cancelling"})
 _CONVERSATION_TERMINAL_STATES = frozenset({"complete", "failed", "cancelled"})
 _IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 _CONVERSATION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{24,128}$")
+_SENSITIVE_QUERY_PARAMETER_RE = re.compile(
+    r"(?:^|[_-])(?:access[_-]?token|auth|authorization|code|credential|jwt|key|password|"
+    r"refresh[_-]?token|secret|session|sig|signature|state|token)(?:$|[_-])",
+    re.IGNORECASE,
+)
 _conversation_schema_lock = threading.Lock()
 _conversation_schema_ready_for: str | None = None
 _conversation_payloads_lock = threading.Lock()
@@ -516,7 +521,15 @@ def _validate_page_payload(
     netloc = f"[{hostname}]" if ":" in hostname else hostname
     if port is not None:
         netloc = f"{netloc}:{port}"
-    page_url = urlunsplit((parsed.scheme, netloc, parsed.path or "/", "", ""))
+    safe_query = urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not _SENSITIVE_QUERY_PARAMETER_RE.search(key)
+        ],
+        doseq=True,
+    )
+    page_url = urlunsplit((parsed.scheme, netloc, parsed.path or "/", safe_query, ""))
 
     page_title = _optional_string(data, "page_title", _MAX_PAGE_TITLE_CHARS) or "Untitled page"
     prompt = _optional_string(data, "prompt", _MAX_PROMPT_CHARS)

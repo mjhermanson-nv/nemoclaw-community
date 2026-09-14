@@ -11,13 +11,11 @@ function sanitizedTarget(tab) {
   try {
     const url = new URL(tab.url || "");
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
-    const isGoogleDoc = /^https:\/\/docs\.google\.com\/document\/d\/[A-Za-z0-9_-]{10,128}(?:\/|$)/.test(url.href);
-    const documentTab = isGoogleDoc ? url.searchParams.get("tab") : null;
-    url.search = "";
-    url.hash = "";
-    if (documentTab && /^[A-Za-z0-9._-]{1,128}$/.test(documentTab)) {
-      url.searchParams.set("tab", documentTab);
+    const sensitiveQueryParameter = /(?:^|[_-])(?:access[_-]?token|auth|authorization|code|credential|jwt|key|password|refresh[_-]?token|secret|session|sig|signature|state|token)(?:$|[_-])/i;
+    for (const key of [...url.searchParams.keys()]) {
+      if (sensitiveQueryParameter.test(key)) url.searchParams.delete(key);
     }
+    url.hash = "";
     return {
       tabId: tab.id,
       windowId: tab.windowId,

@@ -41,6 +41,8 @@ if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/n
 fi
 node "$ROOT/tests/test_sidepanel_parsing.js"
 node "$ROOT/tests/test_auth_session.js"
+node "$ROOT/tests/test_service_worker.js"
+node "$ROOT/tests/test_authenticated_fetch.js"
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
@@ -97,8 +99,8 @@ fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'one forced inference route' "$ROOT/README.md"
 grep -Fq 'A shorter development path based on `hermes plugins install` is being' "$ROOT/README.md"
-grep -Fq 'version: "0.9.3"' "$ROOT/hermes-plugin/plugin.yaml"
-grep -Fq '"version": "0.9.3"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.4"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"

@@ -137,7 +137,7 @@
     }
   }
 
-  async function refreshSession(origin) {
+  async function refreshSession(origin, options = {}) {
     const current = await availableRefresh(origin);
     if (!current?.refreshToken) return null;
     const response = await fetch(`${origin}/auth/native/refresh`, {
@@ -149,7 +149,8 @@
       }),
       credentials: "omit",
       cache: "no-store",
-      redirect: "manual"
+      redirect: "manual",
+      signal: options.signal
     });
     if (!response.ok) {
       if (response.status === 400 || response.status === 401) await clearSession();
@@ -181,12 +182,12 @@
   }
 
   async function sessionForRequest(origin, options = {}) {
-    if (options.forceRefresh) return refreshSession(origin);
+    if (options.forceRefresh) return refreshSession(origin, options);
     const stored = await storedSession(origin);
     if (sessionIsCurrent(stored)) return stored;
     const fromCookie = await cookieSession(origin);
     if (sessionIsCurrent(fromCookie)) return saveSession(fromCookie);
-    return refreshSession(origin);
+    return refreshSession(origin, options);
   }
 
   globalThis.AskNemoClawAuth = Object.freeze({

@@ -100,12 +100,14 @@ function makeContext({ cookies = [], stored = {}, fetchImpl = null } = {}) {
       };
     }
   });
+  const refreshController = new AbortController();
   const refreshed = await refreshContext.auth.sessionForRequest(
     "https://agent.example.test",
-    { forceRefresh: true }
+    { forceRefresh: true, signal: refreshController.signal }
   );
   assert.equal(refreshRequest.url, "https://agent.example.test/auth/native/refresh");
   assert.equal(refreshRequest.options.credentials, "omit");
+  assert.equal(refreshRequest.options.signal, refreshController.signal);
   assert.deepEqual(
     JSON.parse(refreshRequest.options.body),
     { refresh_token: "stored-refresh-token", provider: "basic" }

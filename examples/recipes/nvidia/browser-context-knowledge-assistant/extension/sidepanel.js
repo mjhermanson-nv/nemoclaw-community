@@ -40,7 +40,7 @@ const MAX_SELECTED_TEXT_CHARS = 50000;
 const MAX_VIEWPORT_IMAGE_BYTES = 4000000;
 const MAX_VIEWPORT_IMAGE_PIXELS = 4000000;
 const MAX_VIEWPORT_IMAGE_EDGE = 2048;
-const HERMES_REQUEST_TIMEOUT_MS = 20000;
+const HERMES_REQUEST_TIMEOUT_MS = 60000;
 const sessionAuth = globalThis.AskNemoClawAuth;
 
 const elements = {
@@ -83,6 +83,8 @@ let retryAction = null;
 let pendingSubmission = null;
 let dashboardSessionToken = null;
 let dashboardSessionTokenOrigin = null;
+let refreshGeneration = 0;
+let refreshController = null;
 
 function originPermission(origin) {
   return `${origin}/*`;
@@ -254,11 +256,24 @@ function scrollConversationToBottom() {
   }
 }
 
+function conversationIsNearBottom() {
+  const root = document.documentElement;
+  return globalThis.scrollY + globalThis.innerHeight >= root.scrollHeight - 160;
+}
+
+const SENSITIVE_QUERY_PARAMETER = /(?:^|[_-])(?:access[_-]?token|auth|authorization|code|credential|jwt|key|password|refresh[_-]?token|secret|session|sig|signature|state|token)(?:$|[_-])/i;
+
+function removeSensitiveQueryParameters(url) {
+  for (const key of [...url.searchParams.keys()]) {
+    if (SENSITIVE_QUERY_PARAMETER.test(key)) url.searchParams.delete(key);
+  }
+}
+
 function sanitizePageUrl(rawUrl) {
   const url = new URL(rawUrl || "");
   if (!['http:', 'https:'].includes(url.protocol)) return null;
   if (url.username || url.password) return null;
-  url.search = "";
+  removeSensitiveQueryParameters(url);
   url.hash = "";
   return url.href;
 }
@@ -690,18 +705,28 @@ async function loadDashboardSessionToken(signal) {
 
 async function authenticatedFetch(url, options = {}) {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const requestOptions = { ...options };
+  delete requestOptions.signal;
+  const abortFromCaller = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), HERMES_REQUEST_TIMEOUT_MS);
   try {
     const headers = new Headers(options.headers || {});
-    let bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin);
+    let bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin, { signal: controller.signal });
+    let usedDashboardToken = false;
     if (bearerSession?.accessToken) {
       headers.set("Authorization", `Bearer ${bearerSession.accessToken}`);
     } else {
       const dashboardToken = await loadDashboardSessionToken(controller.signal);
-      if (dashboardToken) headers.set("X-Hermes-Session-Token", dashboardToken);
+      if (dashboardToken) {
+        headers.set("X-Hermes-Session-Token", dashboardToken);
+        usedDashboardToken = true;
+      }
     }
     let response = await fetch(url, {
-      ...options,
+      ...requestOptions,
       headers,
       credentials: "include",
       cache: "no-store",
@@ -709,13 +734,33 @@ async function authenticatedFetch(url, options = {}) {
       signal: controller.signal
     });
     if (response.status === 401 && bearerSession?.refreshToken) {
-      bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin, { forceRefresh: true });
+      bearerSession = await sessionAuth.sessionForRequest(nemoClawOrigin, {
+        forceRefresh: true,
+        signal: controller.signal
+      });
       if (bearerSession?.accessToken) {
         headers.set("Authorization", `Bearer ${bearerSession.accessToken}`);
         response = await fetch(url, {
-          ...options,
+          ...requestOptions,
           headers,
           credentials: "omit",
+          cache: "no-store",
+          redirect: "manual",
+          signal: controller.signal
+        });
+      }
+    }
+    if (response.status === 401 && usedDashboardToken) {
+      dashboardSessionToken = null;
+      dashboardSessionTokenOrigin = null;
+      headers.delete("X-Hermes-Session-Token");
+      const renewedDashboardToken = await loadDashboardSessionToken(controller.signal);
+      if (renewedDashboardToken) {
+        headers.set("X-Hermes-Session-Token", renewedDashboardToken);
+        response = await fetch(url, {
+          ...requestOptions,
+          headers,
+          credentials: "include",
           cache: "no-store",
           redirect: "manual",
           signal: controller.signal
@@ -741,8 +786,13 @@ async function authenticatedFetch(url, options = {}) {
     return response;
   } catch (error) {
     if (error?.name === "AbortError") {
+      if (externalSignal?.aborted) {
+        const cancelled = new Error("Request cancelled.");
+        cancelled.cancelled = true;
+        throw cancelled;
+      }
       setConnectionState("unavailable", "NemoClaw did not respond");
-      throw new Error("NemoClaw did not respond within 20 seconds.");
+      throw new Error("NemoClaw did not respond within 60 seconds.");
     }
     if (!error?.authenticationRequired) {
       setConnectionState("unavailable", "NemoClaw is unavailable");
@@ -750,6 +800,7 @@ async function authenticatedFetch(url, options = {}) {
     throw error;
   } finally {
     clearTimeout(timeout);
+    externalSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -807,7 +858,6 @@ function showStatus(status) {
   elements.statusDetail.textContent = detail;
   elements.stopButton.hidden = status === "cancelling";
   elements.status.hidden = false;
-  scrollConversationToBottom();
 }
 
 function hideStatus() {
@@ -835,6 +885,7 @@ async function readJsonResponse(response, fallback) {
 }
 
 function renderConversationMessages(messages) {
+  const followLatest = conversationIsNearBottom();
   elements.messages.replaceChildren();
   if (!messages.length) {
     elements.messages.appendChild(elements.emptyState);
@@ -852,7 +903,7 @@ function renderConversationMessages(messages) {
     }
     elements.messages.appendChild(bubble);
   }
-  scrollConversationToBottom();
+  if (followLatest) scrollConversationToBottom();
 }
 
 async function loadConversation(conversationId, resumePolling = true) {
@@ -863,17 +914,17 @@ async function loadConversation(conversationId, resumePolling = true) {
   elements.conversationSelect.value = activeConversationId;
   renderConversationMessages(body.messages || []);
   if (resumePolling && body.active_job) {
-    activeJob = body.active_job;
+    activeJob = { ...body.active_job, conversation_id: activeConversationId };
     showStatus(activeJob.status);
-    schedulePoll(activeJob.job_id);
+    schedulePoll(activeJob.job_id, activeConversationId);
   } else if (!activeJob) {
     hideStatus();
   }
   return body;
 }
 
-async function loadConversationList(preferredId = null) {
-  const response = await authenticatedFetch(conversationsEndpoint());
+async function loadConversationList(preferredId = null, initialResponse = null, loadSelected = true) {
+  const response = initialResponse || await authenticatedFetch(conversationsEndpoint());
   const body = await readJsonResponse(response, "NemoClaw could not list recent conversations.");
   const conversations = body.conversations || [];
   elements.conversationSelect.replaceChildren();
@@ -886,11 +937,22 @@ async function loadConversationList(preferredId = null) {
   const selected = conversations.find(item => item.conversation_id === preferredId)?.conversation_id
     || conversations[0]?.conversation_id
     || null;
-  if (selected) await loadConversation(selected);
+  if (selected && loadSelected) await loadConversation(selected);
   return selected;
 }
 
-async function createConversation() {
+function showCreatedConversation(conversation) {
+  activeConversationId = conversation.conversation_id;
+  const option = document.createElement("option");
+  option.value = activeConversationId;
+  option.textContent = conversation.title || "New conversation";
+  elements.conversationSelect.prepend(option);
+  elements.conversationSelect.value = activeConversationId;
+  renderConversationMessages([]);
+  return chrome.storage.local.set({ askNemoClawConversationId: activeConversationId });
+}
+
+async function createConversation({ signal = null, expectedGeneration = null } = {}) {
   clearTimeout(pollTimer);
   activeJob = null;
   hideStatus();
@@ -899,14 +961,21 @@ async function createConversation() {
   const response = await authenticatedFetch(conversationsEndpoint(), {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=UTF-8" },
-    body: JSON.stringify({ title })
+    body: JSON.stringify({ title }),
+    signal
   });
   const body = await readJsonResponse(response, "NemoClaw could not create a conversation.");
-  await loadConversationList(body.conversation.conversation_id);
+  if (expectedGeneration !== null && expectedGeneration !== refreshGeneration) return null;
+  await showCreatedConversation(body.conversation);
   elements.prompt.focus();
+  return body.conversation;
 }
 
 async function refreshPageAndCreateConversation() {
+  const generation = ++refreshGeneration;
+  refreshController?.abort();
+  const controller = new AbortController();
+  refreshController = controller;
   elements.refreshButton.disabled = true;
   clearTimeout(pollTimer);
   activeJob = null;
@@ -925,8 +994,9 @@ async function refreshPageAndCreateConversation() {
       return;
     }
     elements.prompt.value = "";
-    await createConversation();
+    await createConversation({ signal: controller.signal, expectedGeneration: generation });
   } catch (error) {
+    if (error.cancelled || generation !== refreshGeneration || activeJob || pendingSubmission) return;
     showError(
       "Page refresh failed",
       error.message || "Ask NemoClaw could not reload the active page.",
@@ -934,35 +1004,62 @@ async function refreshPageAndCreateConversation() {
       () => refreshPageAndCreateConversation()
     );
   } finally {
-    elements.refreshButton.disabled = false;
+    if (refreshController === controller) refreshController = null;
+    if (generation === refreshGeneration) elements.refreshButton.disabled = false;
   }
 }
 
-function schedulePoll(jobId) {
+async function createNewConversation() {
+  const generation = ++refreshGeneration;
+  refreshController?.abort();
+  const controller = new AbortController();
+  refreshController = controller;
+  elements.newConversationButton.disabled = true;
   clearTimeout(pollTimer);
-  pollTimer = setTimeout(() => pollResponse(jobId), 1200);
+  activeJob = null;
+  pendingSubmission = null;
+  hideStatus();
+  clearError();
+  try {
+    await createConversation({ signal: controller.signal, expectedGeneration: generation });
+  } catch (error) {
+    if (error.cancelled || generation !== refreshGeneration) return;
+    showError(
+      "Conversation could not start",
+      error.message || "NemoClaw could not create a conversation.",
+      false,
+      () => createNewConversation()
+    );
+  } finally {
+    if (refreshController === controller) refreshController = null;
+    if (generation === refreshGeneration) elements.newConversationButton.disabled = false;
+  }
 }
 
-async function pollResponse(jobId) {
-  if (!activeConversationId) return;
+function schedulePoll(jobId, conversationId) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(() => pollResponse(jobId, conversationId), 1200);
+}
+
+async function pollResponse(jobId, conversationId) {
+  if (!conversationId || activeConversationId !== conversationId) return;
   try {
-    const response = await authenticatedFetch(conversationUrl(activeConversationId, `/messages/${encodeURIComponent(jobId)}`));
+    const response = await authenticatedFetch(conversationUrl(conversationId, `/messages/${encodeURIComponent(jobId)}`));
     const body = await readJsonResponse(response, "The extension could not read the response status from NemoClaw.");
-    if (body.conversation_id !== activeConversationId) return;
+    if (body.conversation_id !== conversationId || activeConversationId !== conversationId) return;
     if (body.status === "complete") {
       activeJob = null;
       pendingSubmission = null;
       hideStatus();
       clearError();
-      await loadConversation(activeConversationId, false);
-      await loadConversationList(activeConversationId);
+      await loadConversation(conversationId, false);
       return;
     }
     if (body.status === "failed" || body.status === "cancelled") {
       activeJob = null;
       pendingSubmission = null;
       hideStatus();
-      await loadConversation(activeConversationId, false);
+      await loadConversation(conversationId, false);
       showError(
         body.status === "cancelled" ? "Request stopped" : "NemoClaw request failed",
         body.error?.message || "NemoClaw could not process this request.",
@@ -971,14 +1068,14 @@ async function pollResponse(jobId) {
       );
       return;
     }
-    activeJob = body;
+    activeJob = { ...body, conversation_id: conversationId };
     showStatus(body.status);
-    schedulePoll(jobId);
+    schedulePoll(jobId, conversationId);
   } catch (error) {
     if (error.authenticationRequired) {
       showError("Sign in to NemoClaw", "Your NemoClaw session is missing or expired. Sign in normally, then try again.", true, () => initialize());
     } else {
-      showError("NemoClaw is unavailable", error.message, false, () => pollResponse(jobId));
+      showError("NemoClaw is unavailable", error.message, false, () => pollResponse(jobId, conversationId));
     }
   }
 }
@@ -999,23 +1096,28 @@ async function submitMessage(retryPending = false) {
     showError("Message required", "Enter the instruction you want NemoClaw to follow.", false, null);
     return;
   }
-  if (!activeConversationId) await createConversation();
-  let submission = retryPending ? pendingSubmission : null;
-  if (!submission) {
-    const context = await captureContext();
-    if (!context) return;
-    submission = {
-      conversationId: activeConversationId,
-      idempotencyKey: newIdempotencyKey(),
-      body: { ...context, prompt }
-    };
-    pendingSubmission = submission;
-  }
-
-  clearError();
+  if (elements.sendButton.disabled) return;
+  ++refreshGeneration;
+  refreshController?.abort();
+  refreshController = null;
+  elements.refreshButton.disabled = false;
+  elements.newConversationButton.disabled = true;
   elements.sendButton.disabled = true;
-  showStatus("queued");
   try {
+    if (!activeConversationId) await createConversation();
+    let submission = retryPending ? pendingSubmission : null;
+    if (!submission) {
+      const context = await captureContext();
+      if (!context) return;
+      submission = {
+        conversationId: activeConversationId,
+        idempotencyKey: newIdempotencyKey(),
+        body: { ...context, prompt }
+      };
+      pendingSubmission = submission;
+    }
+    clearError();
+    showStatus("queued");
     const response = await authenticatedFetch(conversationUrl(submission.conversationId, "/messages"), {
       method: "POST",
       headers: {
@@ -1025,11 +1127,13 @@ async function submitMessage(retryPending = false) {
       body: JSON.stringify(submission.body)
     });
     const body = await readJsonResponse(response, "NemoClaw did not accept this message.");
-    activeJob = body;
+    activeJob = { ...body, conversation_id: submission.conversationId };
     elements.prompt.value = "";
-    await loadConversation(activeConversationId, false);
-    showStatus(body.status);
-    schedulePoll(body.job_id);
+    if (activeConversationId === submission.conversationId) {
+      await loadConversation(submission.conversationId, false);
+      showStatus(body.status);
+      schedulePoll(body.job_id, submission.conversationId);
+    }
   } catch (error) {
     activeJob = null;
     hideStatus();
@@ -1040,21 +1144,23 @@ async function submitMessage(retryPending = false) {
     }
   } finally {
     elements.sendButton.disabled = false;
+    elements.newConversationButton.disabled = false;
   }
 }
 
 async function stopActiveJob() {
-  if (!activeConversationId || !activeJob?.job_id) return;
+  const conversationId = activeJob?.conversation_id || activeConversationId;
+  if (!conversationId || !activeJob?.job_id) return;
   elements.stopButton.disabled = true;
   try {
     const response = await authenticatedFetch(
-      conversationUrl(activeConversationId, `/messages/${encodeURIComponent(activeJob.job_id)}/cancel`),
+      conversationUrl(conversationId, `/messages/${encodeURIComponent(activeJob.job_id)}/cancel`),
       { method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body: "{}" }
     );
     const body = await readJsonResponse(response, "NemoClaw could not stop this request.");
-    activeJob = body;
+    activeJob = { ...body, conversation_id: conversationId };
     showStatus(body.status);
-    schedulePoll(body.job_id);
+    schedulePoll(body.job_id, conversationId);
   } catch (error) {
     showError("Stop failed", error.message, false, () => stopActiveJob());
   } finally {
@@ -1063,6 +1169,9 @@ async function stopActiveJob() {
 }
 
 async function initialize() {
+  elements.sendButton.disabled = true;
+  elements.newConversationButton.disabled = true;
+  elements.refreshButton.disabled = true;
   clearError();
   showStatus("loading");
   const configured = await loadNemoClawOrigin();
@@ -1086,8 +1195,8 @@ async function initialize() {
   }
   try {
     const stored = await chrome.storage.local.get("askNemoClawConversationId");
-    await resolveNemoClawServiceUrl();
-    const selected = await loadConversationList(stored.askNemoClawConversationId || null);
+    const listResponse = await resolveNemoClawServiceUrl();
+    const selected = await loadConversationList(stored.askNemoClawConversationId || null, listResponse);
     if (!selected) await createConversation();
   } catch (error) {
     if (error.authenticationRequired) {
@@ -1097,6 +1206,9 @@ async function initialize() {
     }
   } finally {
     if (!activeJob) hideStatus();
+    elements.sendButton.disabled = false;
+    elements.newConversationButton.disabled = false;
+    elements.refreshButton.disabled = false;
   }
 }
 
@@ -1105,7 +1217,7 @@ elements.composer.addEventListener("submit", event => {
   submitMessage(false);
 });
 elements.retryButton.addEventListener("click", () => retryAction?.());
-elements.newConversationButton.addEventListener("click", () => createConversation().catch(error => showError("Conversation could not start", error.message, false, () => createConversation())));
+elements.newConversationButton.addEventListener("click", createNewConversation);
 elements.refreshButton.addEventListener("click", refreshPageAndCreateConversation);
 elements.checkConnectionButton.addEventListener("click", () => checkNemoClawConnection(true));
 elements.openNemoClawButton.addEventListener("click", () => {

@@ -47,7 +47,17 @@ assert.doesNotMatch(source, /if \(!isLoopbackOrigin\(nemoClawOrigin\)\) return n
 assert.doesNotMatch(source, /storage\.(?:local|sync)\.set\([^)]*(?:SessionToken|sessionToken|token)/s);
 assert.match(source, /response\.type === "opaqueredirect"/);
 assert.match(source, /response\.headers\.get\("content-type"\)\?\.includes\("text\/html"\)/);
-assert.match(source, /NemoClaw did not respond within 20 seconds/);
+assert.match(source, /HERMES_REQUEST_TIMEOUT_MS = 60000/);
+assert.match(source, /NemoClaw did not respond within 60 seconds/);
+assert.match(source, /generation !== refreshGeneration \|\| activeJob \|\| pendingSubmission/);
+assert.match(source, /refreshController\?\.abort\(\)/);
+assert.match(source, /loadConversation\(submission\.conversationId, false\)/);
+assert.match(source, /schedulePoll\(body\.job_id, submission\.conversationId\)/);
+assert.doesNotMatch(source, /conversationUrl\(activeConversationId, `\/messages\/\$\{encodeURIComponent\(jobId\)\}`\)/);
+assert.match(source, /conversationIsNearBottom\(\)/);
+const showStatusStart = source.indexOf("function showStatus");
+const showStatusEnd = source.indexOf("function hideStatus", showStatusStart);
+assert.doesNotMatch(source.slice(showStatusStart, showStatusEnd), /scrollConversationToBottom/);
 assert.match(source, /Loading conversations/);
 assert.match(source, /checkNemoClawConnection/);
 assert.match(source, /Connected to NemoClaw/);
@@ -130,5 +140,18 @@ assert.equal(captured.selected_text, "Selected");
 const scaled = captureContext.scale(3840, 2160);
 assert.ok(scaled.width <= 2048);
 assert.ok(scaled.width * scaled.height <= 4000000);
+
+const sanitizerStart = source.indexOf("const SENSITIVE_QUERY_PARAMETER");
+const sanitizerEnd = source.indexOf("async function readActiveTab", sanitizerStart);
+assert.ok(sanitizerStart >= 0 && sanitizerEnd > sanitizerStart);
+const sanitizerContext = { URL };
+vm.runInNewContext(
+  `${source.slice(sanitizerStart, sanitizerEnd)}\nglobalThis.sanitize = sanitizePageUrl;`,
+  sanitizerContext
+);
+assert.equal(
+  sanitizerContext.sanitize("https://www.youtube.com/watch?v=example123&access_token=secret#chapter"),
+  "https://www.youtube.com/watch?v=example123"
+);
 
 console.log("side-panel response normalization: OK");
