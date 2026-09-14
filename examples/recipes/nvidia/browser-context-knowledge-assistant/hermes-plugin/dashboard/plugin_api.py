@@ -52,7 +52,10 @@ _MAX_VIEWPORT_IMAGE_EDGE = 4096
 _MAX_REQUEST_BYTES = 6_000_000
 _MAX_AGENT_RESULT_CHARS = 100_000
 _AGENT_READY_TIMEOUT_SECONDS = 45
-_INFERENCE_TIMEOUT_SECONDS = 180
+# A reasoning model may need more than three minutes when the turn contains
+# both a large browser-text capture and a rendered viewport. Keep a bounded
+# deadline, but allow five minutes before interrupting the isolated session.
+_INFERENCE_TIMEOUT_SECONDS = 300
 _MAX_CONVERSATION_MESSAGES = 500
 _MAX_RECENT_CONVERSATIONS = 20
 _MESSAGE_RATE_WINDOW_SECONDS = 5 * 60

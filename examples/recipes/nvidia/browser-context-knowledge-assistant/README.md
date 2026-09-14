@@ -375,6 +375,9 @@ Keep this terminal running while you use the extension.
 Enter `http://127.0.0.1:18789` in the extension settings. No Hermes login is
 required in this loopback development mode. The extension should immediately
 create its first conversation. The port-forward command must continue running.
+Multimodal reasoning over a large page can take several minutes; the side panel
+continues polling while Hermes works, and the backend interrupts a request that
+does not finish within five minutes.
 
 Before opening Chrome, verify that both the tunnel and login-free backend mode
 are active:
