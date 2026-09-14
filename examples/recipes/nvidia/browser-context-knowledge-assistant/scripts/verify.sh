@@ -19,6 +19,7 @@ grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
 grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Loopback development connection is ready' "$ROOT/scripts/check-connection.sh"
 grep -Fq 'status.get("auth_required") is not False' "$ROOT/scripts/check-connection.sh"
+grep -Fq 'X-Hermes-Session-Token' "$ROOT/scripts/check-connection.sh"
 grep -Fq 'nemoclaw-managed-gateway.json' "$ROOT/scripts/onboard.sh"
 grep -Fq 'NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH' "$ROOT/scripts/onboard.sh"
 grep -Fq '/etc/nemoclaw/gateway-management.env' "$ROOT/scripts/onboard.sh"
@@ -27,6 +28,7 @@ grep -Fq 'unset OPENSHELL_LOCAL_TLS_DIR' "$ROOT/scripts/onboard.sh"
 grep -Fq 'HERMES_DOCKERFILE="$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"' "$ROOT/scripts/onboard.sh"
 grep -Fq -- '--from "$HERMES_DOCKERFILE"' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Omitting --from selects the stock managed' "$ROOT/scripts/onboard.sh"
+grep -Fq 'Stopping existing sandbox and its host forwards before recreation' "$ROOT/scripts/onboard.sh"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
   printf 'connection checker accepted a URL path instead of an exact origin\n' >&2
   exit 1

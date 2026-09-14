@@ -63,43 +63,62 @@ probe() {
 probe 'Hermes dashboard route' "$ORIGIN/"
 
 if [[ "$LOOPBACK" == 1 ]]; then
-  STATUS_BODY="$(mktemp)"
-  trap 'rm -f -- "$STATUS_BODY"' EXIT
-  STATUS_CODE="$(curl --silent --show-error --output "$STATUS_BODY" \
-    --write-out '%{http_code}' --max-time 10 "$ORIGIN/api/status")" || {
-      printf 'Hermes status route: unreachable\n' >&2
-      exit 1
-    }
-  printf 'Hermes status route: HTTP %s\n' "$STATUS_CODE"
-  [[ "$STATUS_CODE" == 200 ]] || exit 1
-  if ! python3 - "$STATUS_BODY" <<'PY'
+  python3 - "$ORIGIN" <<'PY'
 import json
+import re
 import sys
+import urllib.error
+import urllib.request
 
-with open(sys.argv[1], encoding="utf-8") as handle:
-    status = json.load(handle)
+origin = sys.argv[1]
+
+try:
+    with urllib.request.urlopen(f"{origin}/api/status", timeout=10) as response:
+        print(f"Hermes status route: HTTP {response.status}")
+        status = json.load(response)
+except (OSError, urllib.error.URLError, ValueError) as error:
+    raise SystemExit(f"ERROR: Hermes status route is unavailable: {error}") from None
+
 if status.get("auth_required") is not False:
     providers = ", ".join(status.get("auth_providers") or []) or "none"
     raise SystemExit(
         "ERROR: loopback development mode is not active; "
         f"Hermes requires authentication (providers: {providers})"
     )
-PY
-  then
-    exit 1
-  fi
 
-  API_STATUS="$(curl --silent --show-error --output /dev/null \
-    --write-out '%{http_code}' --max-time 10 \
-    "$ORIGIN/api/plugins/ask-nemoclaw/conversations")" || {
-      printf 'Ask NemoClaw API route: unreachable\n' >&2
-      exit 1
-    }
-  printf 'Ask NemoClaw API route: HTTP %s\n' "$API_STATUS"
-  if [[ "$API_STATUS" != 200 ]]; then
-    printf 'ERROR: the loopback Ask NemoClaw API must return HTTP 200 without a Hermes session\n' >&2
-    exit 1
-  fi
+try:
+    with urllib.request.urlopen(f"{origin}/", timeout=10) as response:
+        dashboard = response.read(2_000_001).decode("utf-8", "replace")
+except (OSError, urllib.error.URLError) as error:
+    raise SystemExit(f"ERROR: Hermes dashboard route is unavailable: {error}") from None
+
+match = re.search(
+    r'window\.__HERMES_SESSION_TOKEN__\s*=\s*("(?:\\.|[^"\\])*")',
+    dashboard,
+)
+if not match:
+    raise SystemExit("ERROR: Hermes did not provide its ephemeral loopback session token")
+try:
+    token = json.loads(match.group(1))
+except (TypeError, ValueError):
+    raise SystemExit("ERROR: Hermes provided an invalid loopback session token") from None
+if not isinstance(token, str) or not 16 <= len(token) <= 512:
+    raise SystemExit("ERROR: Hermes provided an invalid loopback session token")
+
+request = urllib.request.Request(
+    f"{origin}/api/plugins/ask-nemoclaw/conversations",
+    headers={"X-Hermes-Session-Token": token},
+)
+try:
+    with urllib.request.urlopen(request, timeout=10) as response:
+        print(f"Ask NemoClaw API route: HTTP {response.status}")
+        if response.status != 200:
+            raise SystemExit("ERROR: Ask NemoClaw API route did not accept the loopback session")
+except urllib.error.HTTPError as error:
+    raise SystemExit(f"ERROR: Ask NemoClaw API route returned HTTP {error.code}") from None
+except (OSError, urllib.error.URLError) as error:
+    raise SystemExit(f"ERROR: Ask NemoClaw API route is unavailable: {error}") from None
+PY
   printf 'Loopback development connection is ready. No Hermes login is required.\n'
 else
   probe 'Ask NemoClaw API route' "$ORIGIN/api/plugins/ask-nemoclaw/conversations"
