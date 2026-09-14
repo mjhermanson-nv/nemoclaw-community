@@ -91,13 +91,28 @@ fi
 
 python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOURCE"
 
+HERMES_DOCKERFILE="$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"
+if [[ ! -r "$HERMES_DOCKERFILE" ]]; then
+  printf 'Prepared Hermes Dockerfile is unavailable: %s\n' "$HERMES_DOCKERFILE" >&2
+  exit 1
+fi
+for argument in "$@"; do
+  case "$argument" in
+    --from|--from=*)
+      printf 'Do not pass --from; this recipe selects its prepared Hermes Dockerfile.\n' >&2
+      exit 2
+      ;;
+  esac
+done
+
 printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
 printf 'NemoHermes command: %s\n' "$NEMOHERMES_BIN"
-# Do not pass --from here. Current generated Hermes images require BuildKit,
-# while user-supplied Dockerfiles intentionally remain on the OpenShell
-# gateway builder trust boundary. Preparing the installed Hermes source and
-# using the normal generated-image path preserves both requirements.
+# This exact repository-owned path is recognized as the trusted Hermes
+# Dockerfile. NemoClaw stages the complete repository root and selects the
+# generated-image BuildKit path. Omitting --from selects the stock managed
+# Hermes image, which cannot contain this recipe's plugin layer.
 "$NEMOHERMES_BIN" onboard \
   --name "$SANDBOX_NAME" \
+  --from "$HERMES_DOCKERFILE" \
   "$@"

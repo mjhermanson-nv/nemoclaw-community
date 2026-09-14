@@ -302,13 +302,14 @@ standard Hermes sandbox first: every sandbox registered to the same OpenShell
 gateway shares one forced inference route, and a second sandbox recorded with
 a different model blocks a supported model switch.
 
-The script then uses NemoClaw's normal generated-image path. Do not add
-`--from`: current generated Hermes images require local BuildKit, while custom
-Dockerfiles intentionally remain on the OpenShell gateway builder trust
-boundary.
+The script passes `--from` with the exact repository-owned Hermes Dockerfile.
+NemoClaw recognizes that trusted path, stages the complete source repository,
+and builds the prepared image with local BuildKit. Omitting `--from` selects
+NVIDIA's stock managed Hermes image, which does not contain this recipe's
+backend plugin or loopback marker.
 
 ```bash
-bash scripts/onboard.sh --resume
+bash scripts/onboard.sh --fresh
 ```
 
 Onboarding asks you to select an inference provider and enter its credential.
@@ -325,12 +326,11 @@ characters:
 NEMOCLAW_SANDBOX_NAME=my-browser-agent bash scripts/onboard.sh
 ```
 
-If onboarding stopped before creating the sandbox and reports that the prior
-session used a custom Dockerfile, discard only that incomplete onboarding
-session and restart through the generated-image path:
+If this recipe's image build is interrupted, resume it with the same trusted
+Dockerfile selection:
 
 ```bash
-bash scripts/onboard.sh --fresh
+bash scripts/onboard.sh --resume
 ```
 
 Confirm readiness:
