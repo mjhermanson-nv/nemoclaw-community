@@ -28,7 +28,7 @@ grep -Fq 'unset OPENSHELL_LOCAL_TLS_DIR' "$ROOT/scripts/onboard.sh"
 grep -Fq 'HERMES_DOCKERFILE="$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"' "$ROOT/scripts/onboard.sh"
 grep -Fq -- '--from "$HERMES_DOCKERFILE"' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Omitting --from selects the stock managed' "$ROOT/scripts/onboard.sh"
-grep -Fq 'Stopping existing sandbox and its host forwards before recreation' "$ROOT/scripts/onboard.sh"
+grep -Fq 'Releasing %d existing Ask NemoClaw host forward(s) before recreation' "$ROOT/scripts/onboard.sh"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
   printf 'connection checker accepted a URL path instead of an exact origin\n' >&2
   exit 1

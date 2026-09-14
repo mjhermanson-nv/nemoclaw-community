@@ -113,15 +113,67 @@ printf 'Sandbox name: %s\n' "$SANDBOX_NAME"
 printf 'NemoClaw source: %s\n' "$NEMOCLAW_SOURCE"
 printf 'NemoHermes command: %s\n' "$NEMOHERMES_BIN"
 
-# Recreating a running Hermes sandbox must first retire its host-side dashboard
-# and API forwards. Otherwise the new onboarding process can select a different
-# dashboard port and then fail when the old API forward still owns port 8642.
-# The explicit --recreate-sandbox flag is the user's authorization for this
-# state-changing lifecycle step; ordinary onboarding never stops a sandbox.
-if ((RECREATE_REQUESTED == 1)) \
-   && "$OPENSHELL_BIN" sandbox get "$SANDBOX_NAME" >/dev/null 2>&1; then
-  printf 'Stopping existing sandbox and its host forwards before recreation...\n'
-  "$NEMOHERMES_BIN" "$SANDBOX_NAME" stop
+# Recreating a running Hermes sandbox must retire orphaned host-side service
+# forwards before onboarding binds replacements. Keep the sandbox itself
+# running: NemoHermes needs the live workspace to make its automatic backup.
+# Match the resolved OpenShell executable, exact sandbox argument, and loopback
+# endpoints before signalling a process. Ordinary onboarding never does this.
+if ((RECREATE_REQUESTED == 1)); then
+  mapfile -t STALE_FORWARD_PIDS < <(python3 - "$SANDBOX_NAME" "$OPENSHELL_BIN" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+sandbox_name = sys.argv[1]
+expected_executable = os.path.realpath(sys.argv[2])
+for process in Path("/proc").glob("[0-9]*"):
+    try:
+        executable = os.path.realpath(process / "exe")
+        arguments = [
+            value.decode("utf-8", "surrogateescape")
+            for value in (process / "cmdline").read_bytes().split(b"\0")
+            if value
+        ]
+    except (OSError, PermissionError):
+        continue
+    if executable != expected_executable or len(arguments) < 4:
+        continue
+    try:
+        forward_index = arguments.index("forward")
+        local_index = arguments.index("--local")
+        target_host_index = arguments.index("--target-host")
+    except ValueError:
+        continue
+    if arguments[forward_index : forward_index + 3] != ["forward", "service", sandbox_name]:
+        continue
+    if local_index + 1 >= len(arguments) or target_host_index + 1 >= len(arguments):
+        continue
+    local_endpoint = arguments[local_index + 1]
+    target_host = arguments[target_host_index + 1]
+    if target_host not in {"127.0.0.1", "localhost", "::1"}:
+        continue
+    if not local_endpoint.startswith(("127.0.0.1:", "localhost:", "[::1]:")):
+        continue
+    print(process.name)
+PY
+  )
+  if ((${#STALE_FORWARD_PIDS[@]} > 0)); then
+    printf 'Releasing %d existing Ask NemoClaw host forward(s) before recreation...\n' \
+      "${#STALE_FORWARD_PIDS[@]}"
+    kill "${STALE_FORWARD_PIDS[@]}"
+    for _ in {1..50}; do
+      REMAINING_FORWARD_PIDS=()
+      for process_id in "${STALE_FORWARD_PIDS[@]}"; do
+        kill -0 "$process_id" 2>/dev/null && REMAINING_FORWARD_PIDS+=("$process_id")
+      done
+      ((${#REMAINING_FORWARD_PIDS[@]} == 0)) && break
+      sleep 0.1
+    done
+    if ((${#REMAINING_FORWARD_PIDS[@]} > 0)); then
+      printf 'OpenShell host forwards did not stop; refusing to recreate the sandbox.\n' >&2
+      exit 1
+    fi
+  fi
 fi
 
 # This exact repository-owned path is recognized as the trusted Hermes

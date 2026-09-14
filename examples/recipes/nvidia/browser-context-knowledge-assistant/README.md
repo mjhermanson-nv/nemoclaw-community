@@ -328,8 +328,9 @@ auxiliary-vision dialog does not change OpenShell's enforced route.
 Provider and model environment variables supply onboarding defaults. In
 interactive mode, NemoHermes still displays those choices for confirmation;
 this does not mean that the variables were ignored. A later explicit
-`--recreate-sandbox` run stops the existing sandbox first so its dashboard and
-API forwards release their ports before the replacement is created.
+`--recreate-sandbox` run releases only verified OpenShell service-forward
+processes for that sandbox while leaving the sandbox running long enough for
+NemoHermes to make its automatic state backup.
 
 The default sandbox name is `ask-nemoclaw`. To use another name of 19 or fewer
 characters:
