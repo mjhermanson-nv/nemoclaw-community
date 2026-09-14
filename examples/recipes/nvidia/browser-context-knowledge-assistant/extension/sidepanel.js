@@ -85,6 +85,9 @@ let dashboardSessionToken = null;
 let dashboardSessionTokenOrigin = null;
 let refreshGeneration = 0;
 let refreshController = null;
+let statusTimer = null;
+let currentStatus = null;
+let requestStartedAt = null;
 
 function originPermission(origin) {
   return `${origin}/*`;
@@ -846,21 +849,53 @@ async function checkNemoClawConnection(showFailure = true) {
   }
 }
 
-function showStatus(status) {
+function formatElapsed(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+function renderStatus() {
   const states = {
     loading: ["Loading conversations", "NemoClaw is restoring your recent conversations."],
-    queued: ["Request queued", "NemoClaw is reserving capacity."],
-    prompting: ["NemoClaw is responding", "NemoClaw is using this conversation and the current page context."],
+    starting: ["Starting a conversation", "NemoClaw is preparing the agent conversation."],
+    capturing: ["Capturing current page", "Reading available page text and preparing the visible viewport."],
+    sending: ["Sending page context", "Transferring your prompt and current browser context to NemoClaw."],
+    queued: ["Waiting for agent capacity", "Your request is queued and will start when capacity is available."],
+    prompting: ["Working on your request", "NemoClaw is analyzing the current page context."],
     cancelling: ["Stopping", "NemoClaw is interrupting the current response."]
   };
-  const [title, detail] = states[status] || states.queued;
-  elements.statusTitle.textContent = title;
+  let [title, detail] = states[currentStatus] || states.queued;
+  const tracksElapsed = currentStatus !== "loading" && requestStartedAt !== null;
+  const elapsed = tracksElapsed ? Date.now() - requestStartedAt : 0;
+  if (elapsed >= 60000 && currentStatus === "queued") {
+    title = "Still waiting for capacity";
+    detail = "NemoClaw will start when agent capacity is available.";
+  } else if (elapsed >= 60000 && currentStatus === "prompting") {
+    title = "Still working";
+    detail = "Vision and complex reasoning requests can take several minutes.";
+  }
+  elements.statusTitle.textContent = tracksElapsed ? `${title} · ${formatElapsed(elapsed)}` : title;
   elements.statusDetail.textContent = detail;
-  elements.stopButton.hidden = status === "cancelling";
+  elements.stopButton.hidden = currentStatus === "cancelling" || currentStatus === "loading";
   elements.status.hidden = false;
 }
 
+function showStatus(status, options = {}) {
+  currentStatus = status;
+  if (options.resetElapsed) requestStartedAt = Date.now();
+  if (status !== "loading" && requestStartedAt === null) requestStartedAt = Date.now();
+  clearInterval(statusTimer);
+  renderStatus();
+  if (status !== "loading") statusTimer = setInterval(renderStatus, 1000);
+}
+
 function hideStatus() {
+  clearInterval(statusTimer);
+  statusTimer = null;
+  currentStatus = null;
+  requestStartedAt = null;
   elements.status.hidden = true;
 }
 
@@ -952,10 +987,10 @@ function showCreatedConversation(conversation) {
   return chrome.storage.local.set({ askNemoClawConversationId: activeConversationId });
 }
 
-async function createConversation({ signal = null, expectedGeneration = null } = {}) {
+async function createConversation({ signal = null, expectedGeneration = null, preserveStatus = false } = {}) {
   clearTimeout(pollTimer);
   activeJob = null;
-  hideStatus();
+  if (!preserveStatus) hideStatus();
   clearError();
   const title = activePage?.page_title || "New conversation";
   const response = await authenticatedFetch(conversationsEndpoint(), {
@@ -1104,11 +1139,18 @@ async function submitMessage(retryPending = false) {
   elements.newConversationButton.disabled = true;
   elements.sendButton.disabled = true;
   try {
-    if (!activeConversationId) await createConversation();
+    showStatus(activeConversationId ? "capturing" : "starting", { resetElapsed: true });
+    if (!activeConversationId) {
+      await createConversation({ preserveStatus: true });
+      showStatus("capturing");
+    }
     let submission = retryPending ? pendingSubmission : null;
     if (!submission) {
       const context = await captureContext();
-      if (!context) return;
+      if (!context) {
+        hideStatus();
+        return;
+      }
       submission = {
         conversationId: activeConversationId,
         idempotencyKey: newIdempotencyKey(),
@@ -1117,7 +1159,7 @@ async function submitMessage(retryPending = false) {
       pendingSubmission = submission;
     }
     clearError();
-    showStatus("queued");
+    showStatus("sending");
     const response = await authenticatedFetch(conversationUrl(submission.conversationId, "/messages"), {
       method: "POST",
       headers: {
