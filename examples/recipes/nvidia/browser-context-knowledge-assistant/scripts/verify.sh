@@ -108,8 +108,9 @@ grep -Fq 'release/ask-nemoclaw-extension-0.10.12.zip' "$ROOT/README.md"
 grep -Fq 'Connected to NemoClaw' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
-grep -Fq 'version: "0.9.5"' "$ROOT/hermes-plugin/plugin.yaml"
-grep -Fq '"version": "0.9.5"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq 'version: "0.9.6"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.6"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq '"entry": "index.js"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
@@ -152,6 +153,11 @@ printf '%s\n' \
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
+test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/index.js"
+if test -e "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/dist/index.js"; then
+  printf 'dashboard plugin entry must not use a Docker-ignored dist directory\n' >&2
+  exit 1
+fi
 test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_auth.py"
 test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_public_url.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
