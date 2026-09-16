@@ -78,9 +78,7 @@ assert.match(source, /NemoClaw is not configured/);
 assert.match(source, /const configured = await loadNemoClawOrigin\(\)/);
 assert.doesNotMatch(source, /Ask NemoClaw requires HTTPS or an HTTP loopback NemoClaw origin/);
 assert.match(source, /askNemoClawOrigin/);
-assert.match(source, /new URL\("\/sessions", nemoClawDashboardUrl\)/);
-assert.match(source, /url\.searchParams\.set\("profile", "dashboard-home"\)/);
-assert.match(source, /chrome\.tabs\.create\(\{ url: nemoClawConversationDashboardUrl\(\) \}\)/);
+assert.match(source, /chrome\.tabs\.create\(\{ url: nemoClawDashboardUrl \}\)/);
 assert.match(html, /id="settings-button"/);
 assert.match(html, /aria-label="NemoClaw settings"/);
 assert.match(html, /id="nemoclaw-url"/);
@@ -135,6 +133,7 @@ assert.equal(blocks[3].rows[0][1], "Standardize it");
 const captureStart = source.indexOf("function captureFromPage");
 const captureEnd = source.indexOf("async function captureContext", captureStart);
 const captureContext = {
+  location: { href: "https://example.com/article" },
   document: { title: "Example", body: { innerText: "Visible browser text" } },
   getSelection: () => ({ toString: () => "Selected text" }),
   MAX_VIEWPORT_IMAGE_EDGE: 2048,
@@ -145,6 +144,7 @@ vm.runInNewContext(
   captureContext
 );
 const captured = captureContext.capture(10, 8);
+assert.equal(captured.document_url, "https://example.com/article");
 assert.equal(captured.page_text, "Visible br");
 assert.equal(captured.page_text_truncated, true);
 assert.equal(captured.selected_text, "Selected");
