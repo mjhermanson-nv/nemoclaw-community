@@ -215,7 +215,7 @@ Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 ### 5. Load the Chrome extension
 
 Download the
-[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.11.zip) and
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.12.zip) and
 extract the ZIP file. It contains no deployment URL or credential.
 
 Then load the extracted directory:
