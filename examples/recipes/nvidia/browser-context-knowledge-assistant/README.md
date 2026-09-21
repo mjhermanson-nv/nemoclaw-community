@@ -33,7 +33,7 @@ endpoint, profile, credential, or production data.
 | --- | --- |
 | What do I get? | A Chrome side panel with isolated Hermes conversations, fresh browser context on every message, and local NeMo Relay ATIF traces. |
 | Where does it run? | The NemoClaw agent and Hermes server run on a Linux host. The Ask NemoClaw extension runs in Chrome on your workstation. This guide uses the NemoClaw Brev launchable for the Linux host. |
-| What was tested? | Local tests and a fresh Brev deployment using NemoClaw 0.0.123, OpenShell 0.0.106, and `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on September 14, 2026. |
+| What was tested? | Local tests and a fresh Brev deployment using NemoClaw 0.0.123, Hermes 0.20.6, OpenShell 0.0.106, and `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on September 21, 2026. See [validation notes](docs/brev.md#validation-notes). |
 | What leaves the browser? | The active page URL, title, selected text, readable page text, visible viewport image, and your prompt go to your configured Hermes deployment and inference provider. |
 | Can it take actions? | Not by itself. Tool actions still need an installed Hermes tool, its credentials, and an OpenShell policy that allows the exact destination. |
 | Who maintains it? | This is an NVIDIA-authored educational example with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
@@ -116,16 +116,19 @@ The result should report `Driver=overlay2`.
 Review the NemoClaw license and third-party software notice before running the
 next command. By setting the acceptance variable, you confirm that you accept
 those terms. The command installs the previously tested NemoClaw release without
-starting onboarding because it removes inference credentials from the installer
-process. Keep the release pin until a newer version has passed deployment tests:
+starting onboarding by explicitly deferring it and removing inference credentials
+from the installer process. Keep the release pin until a newer version has passed
+deployment tests:
 
 ```bash
 cd /tmp
 curl -fsSL https://www.nvidia.com/nemoclaw.sh \
-  | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY \
+  | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY -u NEMOCLAW_PROVIDER_KEY \
       NEMOCLAW_AGENT=hermes \
+      NEMOCLAW_PROVIDER=build \
       NEMOCLAW_INSTALL_REF=v0.0.123 \
       NEMOCLAW_NON_INTERACTIVE=1 \
+      NEMOCLAW_DEFER_ONBOARDING=1 \
       NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 \
       bash
 ```
@@ -217,7 +220,7 @@ Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 ### 5. Load the Chrome extension
 
 Download the
-[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.13.zip) and
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.14.zip) and
 extract the ZIP file. It contains no deployment URL or credential.
 
 Then load the extracted directory:

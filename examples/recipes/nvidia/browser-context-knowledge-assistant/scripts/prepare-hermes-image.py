@@ -72,6 +72,7 @@ ADD --checksum=sha256:{RELAY_WHEEL_SHA256} \\
     {RELAY_WHEEL_URL} \\
     /tmp/{RELAY_WHEEL_FILENAME}
 RUN test "$(dpkg --print-architecture)" = "amd64" \\
+    && test -s /opt/hermes/plugins/ask-nemoclaw/dashboard/index.js \\
     && uv pip install --python /opt/hermes/.venv/bin/python \\
        --no-cache --no-deps /tmp/{RELAY_WHEEL_FILENAME} \\
     && /opt/hermes/.venv/bin/python -c \\

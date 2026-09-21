@@ -133,7 +133,7 @@ third-party notices before redistributing the example or a built image.
 | Path | Purpose |
 | --- | --- |
 | `extension/` | Manifest V3 Chrome side-panel source. |
-| `release/ask-nemoclaw-extension-0.10.13.zip` | Prebuilt portable extension for local installation. |
+| `release/ask-nemoclaw-extension-0.10.14.zip` | Prebuilt portable extension for local installation. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay settings, and managed enablement to the Hermes image source. |

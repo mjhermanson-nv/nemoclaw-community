@@ -5,7 +5,6 @@
 set -Eeuo pipefail
 
 GATEWAY_NAME="${NEMOCLAW_GATEWAY_NAME:-nemoclaw}"
-GATEWAY_ENDPOINT="${NEMOCLAW_GATEWAY_ENDPOINT:-https://127.0.0.1:8080}"
 MANAGEMENT_ENV="/etc/nemoclaw/gateway-management.env"
 OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
 [[ -x "$OPENSHELL_BIN" ]] || OPENSHELL_BIN="$(command -v openshell || true)"
@@ -33,11 +32,10 @@ if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == 
     exit 1
   fi
 
-  if ! "$OPENSHELL_BIN" gateway select "$GATEWAY_NAME" >/dev/null 2>&1; then
-    "$OPENSHELL_BIN" gateway add --name "$GATEWAY_NAME" --local "$GATEWAY_ENDPOINT" >/dev/null
-  fi
-
-  sandbox_output="$($OPENSHELL_BIN sandbox list 2>&1)" || {
+  # Newer launchables use port 18080. Inspect the deployment's actual endpoint
+  # directly, so a stale named registration cannot select a different gateway.
+  GATEWAY_ENDPOINT="${NEMOCLAW_OPENSHELL_GATEWAY_ENDPOINT:-${NEMOCLAW_GATEWAY_ENDPOINT:-https://127.0.0.1:${NEMOCLAW_GATEWAY_PORT:-8080}}}"
+  sandbox_output="$("$OPENSHELL_BIN" --gateway-endpoint "$GATEWAY_ENDPOINT" sandbox list 2>&1)" || {
     printf 'The Brev gateway could not be inspected. No service was changed.\n%s\n' "$sandbox_output" >&2
     exit 1
   }

@@ -39,11 +39,22 @@ Operation is not implemented or not supported
 `scripts/prepare-brev-gateway.sh` first proves that the legacy gateway contains
 no sandbox. It then stops and disables only `openshell-gateway.service`, removes
 the stale client registration, and leaves the old gateway data intact.
+It reads the launchable's declared gateway endpoint, including port `18080` on
+newer launchables, rather than relying on a previously selected registration.
 
 `scripts/onboard.sh` selects the repository’s `nemoclaw-managed` gateway
 declaration and opts into the authenticated compatibility-container mode. This
 avoids copying a newer native gateway onto the tested Ubuntu 22.04 host, where
 its newer glibc requirement may not be available.
+
+For the pinned NemoClaw release, `prepare-brev-gateway-compat.py` also patches
+the source and compiled compatibility launcher to run as the host user, with
+the Docker socket's group added. This lets the gateway read its private state
+files while retaining `--cap-drop ALL`, `no-new-privileges`, and the existing
+file permissions. It also places the gateway's credential-encryption key under
+the existing persistent state mount using `XDG_STATE_HOME`.
+It rejects an unexpected launcher structure instead of
+applying the patch to an unknown release.
 
 Don’t copy individual OpenShell binaries into `/usr/local/bin`. The CLI,
 gateway, and sandbox driver need to be from a compatible build.
@@ -67,6 +78,13 @@ state. The script also clears its lifecycle registration and releases only the
 verified service forwards owned by that sandbox. A normal onboarding run is
 non-destructive.
 
+On NemoClaw 0.0.123, repeating onboarding can also stop with an ambiguous
+gateway port-owner error after the sandbox has been removed. Do not signal an
+unverified process or delete its state. Confirm that the gateway is the one
+owned by this deployment and contains no sandboxes before restarting it through
+its container manager, then resume onboarding. A fresh host avoids this
+recreation-specific recovery step.
+
 The default sandbox name is `ask-nemoclaw`. To use another name of 19 or fewer
 characters:
 
@@ -75,6 +93,12 @@ NEMOCLAW_SANDBOX_NAME=my-browser-agent bash scripts/onboard.sh
 ```
 
 ## Dashboard port conflicts
+
+The extension's **Open NemoClaw** button opens the Sessions page with
+`profile=dashboard-home`, where the prepared Hermes image stores browser
+conversations. Opening the dashboard root can select the unrelated `default`
+profile on Hermes 0.20.6. If conversations appear missing, use
+`http://127.0.0.1:18789/sessions?profile=dashboard-home` with your forwarded port.
 
 NemoClaw normally assigns dashboard port `18789`. Check the actual port with:
 
@@ -120,3 +144,19 @@ The checker doesn’t print or store the token. If it reports that authenticatio
 is required, the sandbox was configured for a shared deployment or was built
 before the loopback marker was added. Recreate it from the current recipe if
 you don’t need its existing state.
+
+## Validation notes
+
+The September 21, 2026 Brev test used a new CPU instance and synthetic page
+content. Live checks covered readable page text, follow-up messages, changed
+page text, separate conversations, cancellation, rejection of an untrusted
+web origin, dashboard session visibility, and creation of ATIF trace files.
+The real Chrome extension also read a canvas-only label and identified its
+blue circle and purple square.
+
+The provider returned transient HTTP 503 responses during setup, then passed
+its inference checks. One visual answer contained malformed `<unk>` tokens;
+subsequent focused visual questions returned the correct label and shapes.
+An extension request also timed out once and succeeded when retried. These
+tests establish working request paths, not deterministic model output or a
+guarantee of provider availability.

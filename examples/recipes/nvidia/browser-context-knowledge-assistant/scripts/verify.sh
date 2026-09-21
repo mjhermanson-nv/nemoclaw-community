@@ -50,6 +50,8 @@ node "$ROOT/tests/test_authenticated_fetch.js"
 node "$ROOT/tests/test_capture_context.js"
 node "$ROOT/tests/test_sidepanel_navigation.js"
 "$PYTHON_BIN" "$ROOT/tests/test_prepare_hermes_image.py" -v
+"$PYTHON_BIN" "$ROOT/tests/test_brev_gateway_handoff.py" -v
+"$PYTHON_BIN" "$ROOT/tests/test_brev_gateway_compat.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
@@ -106,7 +108,7 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'https://github.com/NVIDIA/NemoClaw/issues/8887' "$ROOT/README.md"
-grep -Fq 'release/ask-nemoclaw-extension-0.10.13.zip' "$ROOT/README.md"
+grep -Fq 'release/ask-nemoclaw-extension-0.10.14.zip' "$ROOT/README.md"
 grep -Fq 'Connected to NemoClaw' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
