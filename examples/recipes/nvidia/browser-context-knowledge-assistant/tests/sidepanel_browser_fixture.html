@@ -88,8 +88,11 @@
         status,
         headers: { "Content-Type": "application/json" }
       });
+      globalThis.AskNemoClawAuth = { sessionForRequest: async () => null };
+      const tabEvent = () => ({ addListener: () => {}, removeListener: () => {} });
       globalThis.chrome = {
         tabs: {
+          onActivated: tabEvent(), onUpdated: tabEvent(), onRemoved: tabEvent(),
           query: async () => [{ id: 17, windowId: 3, title: "NemoClaw browser context demo", url: "https://example.com/nemoclaw-demo" }],
           captureVisibleTab: async () => {
             const canvas = document.createElement("canvas");
@@ -106,7 +109,7 @@
           create: async () => ({})
         },
         scripting: {
-          executeScript: async () => [{ result: { page_title: "NemoClaw browser context demo", page_text: "A synthetic video-style demonstration of browser context sent to a NemoClaw agent running with Hermes.", selected_text: "", page_text_truncated: false } }]
+          executeScript: async ({ args }) => args ? [{ documentId: "fixture-document", result: { document_url: "https://example.com/nemoclaw-demo", page_title: "NemoClaw browser context demo", page_text: "A synthetic video-style demonstration of browser context sent to a NemoClaw agent running with Hermes.", selected_text: "", page_text_truncated: false } }] : [{ documentId: "fixture-document", result: "https://example.com/nemoclaw-demo" }]
         },
         storage: {
           session: { get: async () => ({ askNemoClawTarget: null }) },

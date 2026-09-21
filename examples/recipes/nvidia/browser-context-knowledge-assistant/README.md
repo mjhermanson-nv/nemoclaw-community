@@ -10,7 +10,7 @@
 | Description | Adds a Chrome side panel that sends your prompt, readable page text, and the visible viewport to a NemoClaw agent running with Hermes. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw with Hermes · x86-64 Linux and Docker · Chrome 116+ · inference provider API key · Brev or another Linux host |
-| NemoClaw | Unpinned |
+| NemoClaw | 0.0.123 |
 | Harness | Hermes Unpinned |
 | OpenShell | Unpinned |
 
@@ -115,14 +115,16 @@ The result should report `Driver=overlay2`.
 
 Review the NemoClaw license and third-party software notice before running the
 next command. By setting the acceptance variable, you confirm that you accept
-those terms. The command updates NemoClaw without starting onboarding because
-it removes inference credentials from the installer process:
+those terms. The command installs the previously tested NemoClaw release without
+starting onboarding because it removes inference credentials from the installer
+process. Keep the release pin until a newer version has passed deployment tests:
 
 ```bash
 cd /tmp
 curl -fsSL https://www.nvidia.com/nemoclaw.sh \
   | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY \
       NEMOCLAW_AGENT=hermes \
+      NEMOCLAW_INSTALL_REF=v0.0.123 \
       NEMOCLAW_NON_INTERACTIVE=1 \
       NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 \
       bash
@@ -215,7 +217,7 @@ Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 ### 5. Load the Chrome extension
 
 Download the
-[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.11.zip) and
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.13.zip) and
 extract the ZIP file. It contains no deployment URL or credential.
 
 Then load the extracted directory:
@@ -246,6 +248,9 @@ Every message recaptures the available page text and visible viewport. The
 page doesn’t need readable DOM text if Chrome can capture a valid viewport
 image. After changing tabs, select the toolbar icon on the new tab before
 selecting **Refresh**; this grants temporary access to that tab.
+Keep the target tab active until capture finishes. If the tab or document changes
+during capture, the extension discards the capture and asks you to try again.
+When selecting another conversation, wait for it to load before sending a message.
 
 The agent chooses skills from your prompt, not from the page URL. For example,
 a Google Docs skill is used only when it’s installed, authorized, allowed by
@@ -259,6 +264,15 @@ Chrome’s memory-backed session storage.
 
 Multimodal requests over large pages can take several minutes. The side panel
 keeps polling and shows the current request stage while Hermes works.
+**Stop** prevents message submission during page capture and prevents prompt
+submission when Hermes accepts cancellation during initialization or image
+attachment. If a message upload is already in progress, the extension requests
+cancellation when the server returns its job identifier. After prompt submission,
+Stop requests a session interrupt; it does not undo completed actions.
+
+If an inference timeout requires a new Hermes session, the next message includes
+the page context again. Earlier conversation history remains visible in the side
+panel, but the replacement session does not inherit that history.
 
 ## Verify the example
 

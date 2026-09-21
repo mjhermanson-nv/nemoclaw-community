@@ -65,7 +65,8 @@ The suite checks:
 - conversation ownership, isolation, and idempotency;
 - viewport-only and multimodal requests;
 - same-session image attachment;
-- cancellation, timeout, and non-PTY behavior;
+- cancellation during initialization and image attachment, timeout recovery, and non-PTY behavior;
+- tab and document changes during capture, and conversation selection during loading;
 - dashboard session visibility;
 - extension builds for portable, HTTPS, loopback, and Brev paths;
 - idempotent Hermes image preparation; and
@@ -97,6 +98,11 @@ The Brev loopback flow is intended for one developer. A shared deployment
 needs normal Hermes authentication and an HTTPS ingress that supports browser
 extension API requests. `deploy/nginx/ask-nemoclaw-server.conf` is a reference
 reverse-proxy template for that integration.
+It preserves the caller's `Origin` so Hermes and the plugin can reject unrelated
+browser origins. Keep that header intact in any additional proxy. The template
+sets `client_max_body_size 6000000` to match the API's encoded request limit;
+configure the same limit or a larger limit in any preceding ingress. An HTTP 413
+response indicates that a request exceeded a body-size limit.
 
 An operator can check a shared route without sending credentials:
 
@@ -127,7 +133,7 @@ third-party notices before redistributing the example or a built image.
 | Path | Purpose |
 | --- | --- |
 | `extension/` | Manifest V3 Chrome side-panel source. |
-| `release/ask-nemoclaw-extension-0.10.11.zip` | Prebuilt portable extension for local installation. |
+| `release/ask-nemoclaw-extension-0.10.13.zip` | Prebuilt portable extension for local installation. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay settings, and managed enablement to the Hermes image source. |

@@ -6,6 +6,7 @@
 
 import argparse
 from pathlib import Path
+import re
 import shutil
 
 
@@ -33,7 +34,7 @@ VISION_ROUTE_BEFORE = """  applyHermesManagedRoute(config, {
     inferenceApi: settings.inferenceApi,
     contextWindow: settings.contextWindow,
   });"""
-VISION_ROUTE_AFTER = VISION_ROUTE_BEFORE + f"""
+VISION_ROUTE_SUFFIX = f"""
 
   // NemoClaw presents its enforced inference route to Hermes as a custom
   // OpenAI-compatible provider. Hermes cannot discover capabilities for that
@@ -42,6 +43,11 @@ VISION_ROUTE_AFTER = VISION_ROUTE_BEFORE + f"""
   if (settings.model === "{VISION_MODEL_ID}") {{
     (config.model as Record<string, unknown>).supports_vision = true;
   }}"""
+VISION_ROUTE_PATTERN = re.compile(
+    "\n".join(r"^[ \t]*" + re.escape(line.strip()) + r"[ \t]*$"
+              for line in VISION_ROUTE_BEFORE.splitlines()),
+    re.MULTILINE,
+)
 LEGACY_MANAGED_PLUGIN_PATH = '  "plugins.enabled",\n'
 RELAY_VERSION = "0.7.2"
 RELAY_WHEEL_FILENAME = (
@@ -102,17 +108,22 @@ def update_managed_policy(text: str) -> str:
             "The managed Hermes dashboard policy has changed; review the current "
             "NemoClaw dashboard seeding contract before applying this example"
         )
-    if VISION_ROUTE_AFTER not in text and VISION_ROUTE_BEFORE not in text:
+    routes = list(VISION_ROUTE_PATTERN.finditer(text))
+    if len(routes) != 1:
         raise SystemExit(
             "The managed Hermes inference route has changed; review the current "
             "NemoClaw vision capability contract before applying this example"
         )
+    # The supported layouts use either an unconditional call or an indented
+    # call guarded by `if (settings.model !== null)`. Preserve that guard.
+    # Do not append the capability block again on a repeated preparation.
+    if VISION_ROUTE_SUFFIX not in text:
+        route = routes[0]
+        text = text[:route.end()] + VISION_ROUTE_SUFFIX + text[route.end():]
     return text.replace(
         MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
     ).replace(
         ROUTING_KEYS_BEFORE, ROUTING_KEYS_AFTER, 1
-    ).replace(
-        VISION_ROUTE_BEFORE, VISION_ROUTE_AFTER, 1
     ).replace(
         LEGACY_MANAGED_PLUGIN_PATH, "", 1
     )
@@ -157,6 +168,7 @@ def main() -> None:
             "The managed example layer is incomplete; restore a clean Hermes "
             "Dockerfile before continuing"
         )
+    updated_policy = update_managed_policy(policy_text)
     if BEGIN_MARKER in text:
         start = text.index(BEGIN_MARKER)
         finish = text.index(END_MARKER, start) + len(END_MARKER)
@@ -166,7 +178,6 @@ def main() -> None:
             print(f"Updated browser context assistant image layer: {dockerfile}")
         else:
             print(f"Browser context assistant image layer is current: {dockerfile}")
-        updated_policy = update_managed_policy(policy_text)
         if updated_policy != policy_text:
             plugin_config.write_text(updated_policy, encoding="utf-8")
             print(f"Updated managed plugin configuration: {plugin_config}")
@@ -183,8 +194,6 @@ def main() -> None:
             "The managed Hermes Dockerfile layout has changed; review the current "
             "NemoClaw plugin installation guide before applying this example"
         )
-
-    updated_policy = update_managed_policy(policy_text)
 
     for _, destination in destinations:
         if destination.exists():

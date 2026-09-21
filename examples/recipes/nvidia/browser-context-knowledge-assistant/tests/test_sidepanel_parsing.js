@@ -133,6 +133,7 @@ assert.equal(blocks[3].rows[0][1], "Standardize it");
 const captureStart = source.indexOf("function captureFromPage");
 const captureEnd = source.indexOf("async function captureContext", captureStart);
 const captureContext = {
+  location: { href: "https://example.com/article" },
   document: { title: "Example", body: { innerText: "Visible browser text" } },
   getSelection: () => ({ toString: () => "Selected text" }),
   MAX_VIEWPORT_IMAGE_EDGE: 2048,

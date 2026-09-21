@@ -47,6 +47,9 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 node "$ROOT/tests/test_auth_session.js"
 node "$ROOT/tests/test_service_worker.js"
 node "$ROOT/tests/test_authenticated_fetch.js"
+node "$ROOT/tests/test_capture_context.js"
+node "$ROOT/tests/test_sidepanel_navigation.js"
+"$PYTHON_BIN" "$ROOT/tests/test_prepare_hermes_image.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v
@@ -79,7 +82,7 @@ grep -Fq 'dashboardPath: "/"' "$ROOT/build/brev-verification-extension/config.js
 grep -Fq 'listen 0.0.0.0:__PROXY_PORT__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
 grep -Fq 'server_name __PUBLIC_HOST__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
 grep -Fq 'proxy_set_header Host __PUBLIC_HOST__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
-grep -Fq 'proxy_set_header Origin __PUBLIC_URL__' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
+grep -Fq 'proxy_set_header Origin $http_origin' "$ROOT/deploy/nginx/ask-nemoclaw-server.conf"
 grep -Fq 'NEMOCLAW_DASHBOARD_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_BREV_PROXY_PORT' "$ROOT/scripts/configure-brev-nginx.sh"
 grep -Fq 'NEMOCLAW_PUBLIC_URL' "$ROOT/scripts/configure-brev-nginx.sh"
@@ -103,12 +106,12 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'https://github.com/NVIDIA/NemoClaw/issues/8887' "$ROOT/README.md"
-grep -Fq 'release/ask-nemoclaw-extension-0.10.11.zip' "$ROOT/README.md"
+grep -Fq 'release/ask-nemoclaw-extension-0.10.13.zip' "$ROOT/README.md"
 grep -Fq 'Connected to NemoClaw' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
-grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"
-grep -Fq '"version": "0.9.4"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq 'version: "0.9.7"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.7"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
